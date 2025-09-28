@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ESP32 LED Controller</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; }
+    h1 { margin-top: 0; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .small { font-size: 12px; color: #555; }
+    .footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #eee; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #ccc; background: #fafafa; cursor: pointer; }
+    button.primary { background: #0b5fff; color: white; border-color: #0b5fff; }
+    label { display: block; font-weight: 600; margin: 6px 0 4px; }
+    select, input[type="range"] { width: 100%; }
+    .wifi { max-width: 520px; }
+    .muted { color: #777; }
+  </style>
+</head>
+<body>
+  <h1>ESP32 LED Controller</h1>
+  <p class="muted">Schalte jede LED ein/aus, wähle ein Blinkmuster und stelle die Helligkeit ein. Änderungen wirken sofort.</p>
+
+  <div id="cards" class="grid"></div>
+
+  <div class="footer">
+    <div class="card wifi">
+      <h3>WLAN-Einstellungen</h3>
+      <p class="small">Verbinde das Gerät mit einem vorhandenen WLAN (STA) oder betreibe es als Access Point (AP). Bei Änderung wird das Gerät neu starten.</p>
+      <div class="row">
+        <label for="mode">Modus</label>
+        <select id="mode">
+          <option value="ap">Access Point</option>
+          <option value="sta">Station (mit WLAN verbinden)</option>
+        </select>
+      </div>
+      <label for="ssid">SSID</label>
+      <input id="ssid" placeholder="WLAN-Name (nur für STA)"/>
+      <label for="pass">Passwort</label>
+      <input id="pass" type="password" placeholder="WLAN-Passwort (nur für STA)"/>
+      <div class="row" style="margin-top:10px">
+        <button id="saveWifi" class="primary">Speichern &amp; Neustarten</button>
+        <span id="wifiStatus" class="small"></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+let patterns = [];
+let leds = [];
+
+async function loadState() {
+  const res = await fetch('/api/state');
+  const data = await res.json();
+  patterns = data.patterns;
+  leds = data.leds;
+  renderCards();
+  refreshWifi();
+}
+
+function renderCards() {
+  const wrap = document.getElementById('cards');
+  wrap.innerHTML = '';
+  leds.forEach(l => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <h3>LED ${l.id} <span class="small">(GPIO ${l.pin})</span></h3>
+      <div class="row">
+        <label>Schalten</label>
+        <button id="toggle-${l.id}" class="${l.enabled ? 'primary' : ''}">${l.enabled ? 'EIN' : 'AUS'}</button>
+      </div>
+      <label for="pat-${l.id}">Muster</label>
+      <select id="pat-${l.id}"></select>
+      <label for="br-${l.id}">Helligkeit: <span id="brv-${l.id}">${l.brightness}</span></label>
+      <input id="br-${l.id}" type="range" min="0" max="255" value="${l.brightness}"/>
+    `;
+    wrap.appendChild(card);
+
+    const sel = card.querySelector(`#pat-${l.id}`);
+    patterns.forEach((p, idx) => {
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = p;
+      if (idx === l.pattern) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      sendLed({id: l.id, pattern: parseInt(sel.value, 10)});
+    });
+
+    const br = card.querySelector(`#br-${l.id}`);
+    const brv = card.querySelector(`#brv-${l.id}`);
+    br.addEventListener('input', () => {
+      brv.textContent = br.value;
+    });
+    br.addEventListener('change', () => {
+      sendLed({id: l.id, brightness: parseInt(br.value, 10)});
+    });
+
+    const tog = card.querySelector(`#toggle-${l.id}`);
+    tog.addEventListener('click', () => {
+      const newEn = !l.enabled;
+      sendLed({id: l.id, enabled: newEn}).then(()=>{
+        l.enabled = newEn;
+        tog.textContent = newEn ? 'EIN' : 'AUS';
+        tog.className = newEn ? 'primary' : '';
+      });
+    });
+  });
+}
+
+async function sendLed(payload) {
+  await fetch('/api/led', {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  // No need to reload entire state every time; lightweight
+}
+
+async function refreshWifi() {
+  try {
+    const res = await fetch('/api/wifi');
+    const w = await res.json();
+    document.getElementById('mode').value = w.mode || 'ap';
+    document.getElementById('ssid').value = w.ssid || '';
+    document.getElementById('pass').value = w.pass || '';
+    document.getElementById('wifiStatus').textContent = `IP: ${w.ip || '-'} | Modus: ${w.mode}`;
+  } catch (e) {
+    document.getElementById('wifiStatus').textContent = 'WLAN-Status nicht verfügbar';
+  }
+}
+
+document.getElementById('saveWifi').addEventListener('click', async () => {
+  const payload = {
+    mode: document.getElementById('mode').value,
+    ssid: document.getElementById('ssid').value,
+    pass: document.getElementById('pass').value
+  };
+  const res = await fetch('/api/wifi', {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const r = await res.json();
+  document.getElementById('wifiStatus').textContent = r.saved ? 'Gespeichert. Neustart...' : 'Fehler beim Speichern';
+});
+
+loadState();
+</script>
+</body>
+</html>
