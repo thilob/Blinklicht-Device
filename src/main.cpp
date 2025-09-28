@@ -1,29 +1,31 @@
 #include <Arduino.h>
 
 /*
-  Zwei entkoppelte Blaulichter (links/rechts) mit gleichem LED-Pattern.
-  - PWM (LEDC), 5 kHz, 8 Bit
-  - Steps bestehen aus: Dauer(ms), Zielhelligkeit(0..255), Fade(true/false)
-  - Beide Seiten laufen unabhängig (eigene Zeit- und Step-Indizes)
-  - Rechtes Blaulicht kann eine abweichende Ruhepause (letzter Step) haben
-
-  Anpassung:
-    - Das Pattern unten (LEDSteps[]) beschreibt EINE LED.
-    - Der letzte Step wird als "Ruhepause" interpretiert.
-    - LEFT_TAIL_REST_OVERRIDE_MS = -1  -> benutze Dauer aus Pattern
-    - RIGHT_TAIL_REST_OVERRIDE_MS = z.B. 400 -> überschreibe letzte Dauer nur rechts
+  Vier entkoppelte Blaulichter mit identischem Pattern, aber je eigener Schluss-Pause.
+  - PWM (LEDC) 5 kHz, 8 Bit
+  - Pattern definiert EIN LED-Ablauf. Der letzte Step ist die Ruhepause.
+  - Pro Ausgang lässt sich die Pausenlänge (nur letzter Step) separat überschreiben.
 */
 
-/// -------------------- Hardware-Pins & LEDC-Konfig --------------------
-constexpr uint8_t PIN_LEFT   = 21;
-constexpr uint8_t PIN_RIGHT  = 22;
+/// -------------------- Hardware & LEDC --------------------
+struct LightHW {
+  uint8_t pin;
+  uint8_t ledcChannel;     // 0..15 auf ESP32
+  int     restOverrideMs;  // -1 = keine Änderung, sonst Dauer in ms für letzten Step
+};
 
-constexpr uint8_t LEDC_CH_LEFT  = 0;
-constexpr uint8_t LEDC_CH_RIGHT = 1;
+// Vorschlag: vorhandene 21/22 + zusätzlich 18/19 (beliebig anpassbar)
+constexpr LightHW LIGHTS[4] = {
+  {21, 0, -1   }, // Light A  (z.B. links vorne)  -> nutzt Pattern-Pause
+  {22, 1, 251  }, // Light B  (z.B. rechts vorne) -> 400 ms Pause
+  {18, 2, 253  }, // Light C  (z.B. links hinten) -> 250 ms Pause
+  {19, 3, 255  }, // Light D  (z.B. rechts hinten)-> 600 ms Pause
+};
+
 constexpr uint32_t LEDC_FREQ_HZ = 5000;
-constexpr uint8_t LEDC_RES_BITS = 8;   // Duty 0..255
+constexpr uint8_t  LEDC_RES_BITS = 8;   // Duty 0..255
 
-/// -------------------- Gamma-Korrektur (optional) --------------------
+/// -------------------- (Optionale) Gamma-Korrektur --------------------
 constexpr bool GAMMA_CORRECTION = false;
 uint8_t gammaTable[256];
 void buildGammaTable() {
@@ -37,51 +39,29 @@ inline uint8_t applyGamma(uint8_t v) {
   return GAMMA_CORRECTION ? gammaTable[v] : v;
 }
 
-/// -------------------- Step-Definition für EINE LED --------------------
+/// -------------------- Pattern für EINE LED --------------------
 struct LEDStep {
   uint16_t duration_ms;  // Länge des Schritts
   uint8_t  level;        // Zielhelligkeit 0..255
-  bool     fade;         // weicher Übergang von vorher zu level über duration_ms
+  bool     fade;         // weicher Übergang über die Step-Dauer
 };
 
-/*
-  Vom Nutzer gewünschtes Pattern (aus der linken Seite extrahiert) + Ruhepause:
-
-  Original (linke LED Abschnitte):
-    {  30, 255, false }
-    {  30,   0, false }
-    {  30, 255, false }
-    {  30,   0, false }
-    { 150, 255, false }
-    {  30,   0, true  }
-    {  30, 255, false }
-    {   0,   0, false }
-    (gesamte Ruhepause am Ende des Zyklus im Original war 250 ms)
-
-  Wir übernehmen das als einzelnes LED-Pattern und hängen eine explizite Ruhepause (250 ms) an.
-*/
+// Pattern aus deiner Spezifikation (linkes Blaulicht) + explizite Ruhepause am Ende
 const LEDStep LEDSteps[] = {
-  {  30, 255, false }, // kurz AN (hart)
+  {  30, 255, false }, // L kurz AN (hart)
   {  30,   0, false }, // kurz AUS
-  {  30, 255, false }, // kurz AN (hart)
+  {  30, 255, false }, // L kurz AN (hart)
   {  30,   0, false }, // kurz AUS
-  { 150, 255, false }, // kurz AN (hart)
-  {  30,   0, true  }, // weich AUS
-  {  30, 255, false }, // kurz AN (hart)
-  {   0,   0, false }, // 0-ms-Schritt (sofort weiter)
+  { 150, 255, false }, // L kurz AN (hart)
+  {  30,   0, true  }, // L weich AUS
+  {  30, 255, false }, // L kurz AN (hart)
+  {   0,   0, false }, // sofort weiter
   { 250,   0, false }, // Ruhepause (LETZTER STEP)
 };
 constexpr size_t NUM_LED_STEPS = sizeof(LEDSteps) / sizeof(LEDSteps[0]);
-
-// Index des Ruhe-Schritts (hier der letzte Eintrag):
 constexpr size_t REST_STEP_INDEX = NUM_LED_STEPS - 1;
 
-// Per-Seite Override für die Ruhepause (letzter Step).
-// -1 => keine Änderung, benutze Dauer aus Pattern
-constexpr int LEFT_TAIL_REST_OVERRIDE_MS  = -1;   // z.B. -1 (Pattern-Dauer) oder 250
-constexpr int RIGHT_TAIL_REST_OVERRIDE_MS = 251;  // z.B. 400 ms (rechte Seite separat)
-
-/* -------------------- PatternPlayer: spielt EIN LED-Pattern -------------------- */
+/* -------------------- Player für EINEN Ausgang -------------------- */
 class PatternPlayer {
 public:
   PatternPlayer(uint8_t ledcChannel, const LEDStep* steps, size_t count, int restOverrideMs = -1)
@@ -101,8 +81,7 @@ public:
     const uint16_t dur = effectiveDuration(idx, s.duration_ms);
 
     if (dt >= dur) {
-      // vor Wechsel sicherstellen, dass Zielpegel gesetzt ist
-      writeLevel(target);
+      writeLevel(target); // Ziel sicherstellen
       nextStep();
       return;
     }
@@ -110,7 +89,7 @@ public:
     const float t = dur > 0 ? (float)dt / (float)dur : 1.0f;
     uint8_t cur = s.fade
       ? (uint8_t)roundf(prev + (float)((int)target - (int)prev) * t)
-      : target; // bei nicht-Fade halten wir das Ziel über die Dauer
+      : target; // bei nicht-Fade halten wir direkt den Zielwert
 
     writeLevel(cur);
   }
@@ -140,49 +119,57 @@ private:
   void startStep(size_t i) {
     const auto& s = steps[i];
     started = millis();
-    // Start-/Zielwerte
-    // Bei fade=false springen wir sofort auf target und halten; bei fade=true interpolieren wir
     target = s.level;
     if (!s.fade) {
-      writeLevel(target); // sofortiger Sprung
-      // prev bleibt der vorherige Endwert; für den nächsten Step ist das ok
+      writeLevel(target); // harter Sprung
     }
-    // Bei fade=true wird in update() von prev -> target interpoliert
+    // bei Fade: Interpolation von prev -> target in update()
   }
 
   void nextStep() {
-    // Schritt fertig: Endwert übernehmen
     prev = target;
     idx = (idx + 1) % count;
     startStep(idx);
   }
 };
 
-/// -------------------- Globale Instanzen --------------------
-PatternPlayer leftPlayer (LEDC_CH_LEFT,  LEDSteps, NUM_LED_STEPS, LEFT_TAIL_REST_OVERRIDE_MS);
-PatternPlayer rightPlayer(LEDC_CH_RIGHT, LEDSteps, NUM_LED_STEPS, RIGHT_TAIL_REST_OVERRIDE_MS);
+/// -------------------- Vier Player-Instanzen --------------------
+PatternPlayer* players[4]; // zur bequemen Schleifensteuerung
 
-/// -------------------- Setup & Loop --------------------
 void setup() {
   if (GAMMA_CORRECTION) buildGammaTable();
-
-  ledcSetup(LEDC_CH_LEFT,  LEDC_FREQ_HZ, LEDC_RES_BITS);
-  ledcSetup(LEDC_CH_RIGHT, LEDC_FREQ_HZ, LEDC_RES_BITS);
-  ledcAttachPin(PIN_LEFT,  LEDC_CH_LEFT);
-  ledcAttachPin(PIN_RIGHT, LEDC_CH_RIGHT);
 
   Serial.begin(115200);
   delay(150);
   Serial.println();
-  Serial.println(F("Entkoppelte Blaulichter gestartet."));
-  Serial.print(F("Right tail rest override (ms): "));
-  Serial.println(RIGHT_TAIL_REST_OVERRIDE_MS);
+  Serial.println(F("Vier entkoppelte Blaulichter gestartet."));
 
-  leftPlayer.begin();
-  rightPlayer.begin();
+  // LEDC konfigurieren und Player erzeugen
+  for (int i = 0; i < 4; ++i) {
+    ledcSetup(LIGHTS[i].ledcChannel, LEDC_FREQ_HZ, LEDC_RES_BITS);
+    ledcAttachPin(LIGHTS[i].pin, LIGHTS[i].ledcChannel);
+  }
+
+  static PatternPlayer p0(LIGHTS[0].ledcChannel, LEDSteps, NUM_LED_STEPS, LIGHTS[0].restOverrideMs);
+  static PatternPlayer p1(LIGHTS[1].ledcChannel, LEDSteps, NUM_LED_STEPS, LIGHTS[1].restOverrideMs);
+  static PatternPlayer p2(LIGHTS[2].ledcChannel, LEDSteps, NUM_LED_STEPS, LIGHTS[2].restOverrideMs);
+  static PatternPlayer p3(LIGHTS[3].ledcChannel, LEDSteps, NUM_LED_STEPS, LIGHTS[3].restOverrideMs);
+
+  players[0] = &p0;
+  players[1] = &p1;
+  players[2] = &p2;
+  players[3] = &p3;
+
+  for (auto* pl : players) pl->begin();
+
+  // Debug-Ausgabe der Pausen
+  Serial.println(F("Rest (override) je Ausgang [ms]:"));
+  for (int i = 0; i < 4; ++i) {
+    Serial.print(F("  Light ")); Serial.print(i);
+    Serial.print(F(": ")); Serial.println(LIGHTS[i].restOverrideMs);
+  }
 }
 
 void loop() {
-  leftPlayer.update();
-  rightPlayer.update();
+  for (auto* pl : players) pl->update();
 }
