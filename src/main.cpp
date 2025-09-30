@@ -432,11 +432,27 @@ static bool loadConfig()
   return true;
 }
 
+// Eindeutige Kennung aus der Chip-MAC (letzte 3 Bytes, z.B. "3F9A2C")
+static String uniqueMacSuffix()
+{
+  uint64_t mac = ESP.getEfuseMac(); // 48-bit MAC aus eFuses
+  uint32_t l = (uint32_t)(mac & 0xFFFFFF);
+  char buf[7];
+  snprintf(buf, sizeof(buf), "%06X", l); // 6 Hex-Zeichen, Uppercase
+  return String(buf);
+}
+
+// Default-SSID "Blaulicht-<Suffix>"
+static String makeDefaultApSsid()
+{
+  return String("Blaulicht-") + uniqueMacSuffix();
+}
+
 static void makeDefaultConfig()
 {
   wifiEnabled = true;
   wifiModeCfg = "ap";
-  apSsidCfg = AP_SSID_DEFAULT;
+  apSsidCfg = makeDefaultApSsid(); // statt AP_SSID_DEFAULT
   apPassCfg = AP_PASS_DEFAULT;
 
   staSsidCfg = "";
@@ -957,8 +973,14 @@ static void startWiFi()
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(AP_IP, AP_GW, AP_MASK);
 
-    // Fallbacks: leere SSID -> Default-SSID; leeres Passwort -> offener AP
-    String ssid = apSsidCfg.length() ? apSsidCfg : String(AP_SSID_DEFAULT);
+    // Fallbacks: leere/legacy SSID -> eindeutige SSID erzeugen
+    String ssid = apSsidCfg.length() ? apSsidCfg : makeDefaultApSsid();
+    if (apSsidCfg != ssid)
+    {
+      apSsidCfg = ssid;
+      saveConfig();
+    }
+
     String pass = apPassCfg; // darf leer sein für offenen AP
 
     bool apok = false;
@@ -1194,6 +1216,13 @@ static void handleCliLine(const String &line)
   {
     bool ok = loadConfig();
     Serial.println(ok ? "OK loaded" : "ERR load");
+    // Falls noch alter oder leerer AP-Name -> eindeutigen erzeugen und speichern
+    if (apSsidCfg.length() == 0 || apSsidCfg == AP_SSID_DEFAULT)
+    {
+      apSsidCfg = makeDefaultApSsid();
+      saveConfig();
+    }
+
     cliApplyAndMaybeStartWifi();
     return;
   }
