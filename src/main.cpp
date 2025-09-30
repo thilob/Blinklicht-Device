@@ -17,6 +17,7 @@
    - Persistenz: /config.json (LittleFS)
    - WLAN: AP (eindeutige SSID + Captive Portal) / STA (DHCP + mDNS Hostname)
    - JsonDocument-API (ArduinoJson v7)
+   - NEU: /api/wifi (nur WLAN), /api/config (nur Logik) => getrenntes Anwenden
    ========================================================================= */
 
 /// -------------------- AP-/Netzwerk-Defaults --------------------
@@ -463,6 +464,7 @@ static bool handleCaptivePortalRedirect()
 }
 
 /// -------------------- REST Endpoints --------------------
+// --- Vollständige Konfiguration lesen (für UI) ---
 static void handleGetConfig() {
   JsonDocument doc;
 
@@ -512,34 +514,19 @@ static void handleGetConfig() {
   sendJSON(out);
 }
 
+// --- NUR Logik speichern (keine WLAN-Änderung / kein WLAN-Restart) ---
 static void handlePutConfig() {
   if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
 
-  // --- WLAN übernehmen (optional vorhanden) ---
-  if (doc["wifi"].is<JsonObject>()) {
-    wifiEnabled = (bool)(doc["wifi"]["enabled"] | wifiEnabled);
-    String newMode = String( doc["wifi"]["mode"] | wifiModeCfg.c_str() );
-    newMode.toLowerCase();
-    if (newMode == "ap" || newMode == "sta") wifiModeCfg = newMode;
-
-    if (doc["wifi"]["ap"].is<JsonObject>()) {
-      apSsidCfg = String( doc["wifi"]["ap"]["ssid"]     | apSsidCfg.c_str() );
-      apPassCfg = String( doc["wifi"]["ap"]["password"] | apPassCfg.c_str() );
-    }
-    if (doc["wifi"]["sta"].is<JsonObject>()) {
-      staSsidCfg= String( doc["wifi"]["sta"]["ssid"]     | staSsidCfg.c_str() );
-      staPassCfg= String( doc["wifi"]["sta"]["password"] | staPassCfg.c_str() );
-    }
-  }
-
-  // --- Pflicht: patterns/groups/lights ---
+  // Pflicht: patterns/groups/lights
   if (!doc["patterns"].is<JsonArray>() || !doc["lights"].is<JsonArray>() || !doc["groups"].is<JsonArray>()) {
-    addCORS(); server.send(400,"text/plain","Invalid JSON structure"); return;
+    addCORS(); server.send(400,"text/plain","Invalid JSON structure (patterns/groups/lights required)"); return;
   }
 
+  // KEINE WLAN-Felder anfassen.
   patterns.clear(); groups.clear(); lights.clear();
 
   for (JsonObject jp : doc["patterns"].as<JsonArray>()) {
@@ -571,36 +558,70 @@ static void handlePutConfig() {
     lights.push_back(std::move(L));
   }
 
-  // Hardware & WLAN anwenden
+  // Nur Logik anwenden
   applyHardware();
 
-  if (wifiEnabled) {
-    if (serverRunning) { server.stop(); serverRunning=false; }
-    // bewusst erst nach Antwort neu starten
-  } else {
-    if (serverRunning) { server.stop(); serverRunning=false; }
-    WiFi.mode(WIFI_OFF);
-    dnsServer.stop();
-    MDNS.end();
+  // Speichern (inkl. unveränderter WLAN-Felder)
+  bool ok = saveConfig();
+
+  addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (saved, no wifi restart)":"ERROR (save failed)");
+}
+
+// --- NUR WLAN lesen/schreiben ---
+static void handleGetWifi() {
+  JsonDocument doc;
+  JsonObject jw = doc["wifi"].to<JsonObject>();
+  jw["enabled"] = wifiEnabled;
+  jw["mode"]    = wifiModeCfg;
+  JsonObject jwa = jw["ap"].to<JsonObject>();
+  jwa["ssid"]     = apSsidCfg.length()?apSsidCfg:makeDefaultApSsid();
+  jwa["password"] = apPassCfg;
+  JsonObject jws = jw["sta"].to<JsonObject>();
+  jws["ssid"]     = staSsidCfg;
+  jws["password"] = staPassCfg;
+
+  String out; serializeJson(doc, out);
+  sendJSON(out);
+}
+
+static void stopWiFi(); // fwd
+void   startWiFi();     // fwd
+
+static void handlePutWifi() {
+  if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
+
+  if (!doc["wifi"].is<JsonObject>()) { addCORS(); server.send(400,"text/plain","Missing 'wifi' object"); return; }
+
+  // WLAN übernehmen
+  wifiEnabled = (bool)(doc["wifi"]["enabled"] | wifiEnabled);
+  String newMode = String( doc["wifi"]["mode"] | wifiModeCfg.c_str() );
+  newMode.toLowerCase();
+  if (newMode == "ap" || newMode == "sta") wifiModeCfg = newMode;
+
+  if (doc["wifi"]["ap"].is<JsonObject>()) {
+    apSsidCfg = String( doc["wifi"]["ap"]["ssid"]     | apSsidCfg.c_str() );
+    apPassCfg = String( doc["wifi"]["ap"]["password"] | apPassCfg.c_str() );
+  }
+  if (doc["wifi"]["sta"].is<JsonObject>()) {
+    staSsidCfg= String( doc["wifi"]["sta"]["ssid"]     | staSsidCfg.c_str() );
+    staPassCfg= String( doc["wifi"]["sta"]["password"] | staPassCfg.c_str() );
   }
 
   bool ok = saveConfig();
 
-  // Vorbereiten auf WLAN-Restart (neue SSID/Passwörter)
-  if (wifiEnabled) {
-    WiFi.softAPdisconnect(true);
-    WiFi.disconnect(true, true);
-  }
+  // Antwort zuerst (damit Client kein Verbindungsreset sieht)
+  addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (wifi saved)":"ERROR (wifi save failed)");
 
-  // Antwort zuerst senden
-  addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (saved)":"ERROR (save failed)");
-
-  // Dann WLAN gemäß Config neu starten
+  // Jetzt WLAN gemäß Config neu starten
   delay(50);
   if (wifiEnabled) {
-    // DHCP im STA-Modus wird im startWiFi() erzwungen
-    extern void startWiFi();
-    startWiFi();
+    stopWiFi();
+    startWiFi(); // erzwingt DHCP im STA-Modus
+  } else {
+    stopWiFi();
   }
 }
 
@@ -644,6 +665,9 @@ static void startServerRoutes() {
   // APIs
   server.on("/api/config",  HTTP_GET, handleGetConfig);
   server.on("/api/config",  HTTP_PUT, handlePutConfig);
+
+  server.on("/api/wifi",    HTTP_GET, handleGetWifi);
+  server.on("/api/wifi",    HTTP_PUT, handlePutWifi);
 
   server.on("/api/sysinfo", HTTP_GET, [](){
     JsonDocument doc;
