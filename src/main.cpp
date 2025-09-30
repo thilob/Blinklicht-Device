@@ -5,6 +5,8 @@
 #include <ArduinoJson.h>
 #include <FS.h>
 #include <esp_bt.h>
+#include <math.h>
+#include <vector>
 
 /* =========================================================================
    Blaulicht-Controller (ESP32)
@@ -12,20 +14,25 @@
    - Mehrere Patterns (letzter Step = Ruhepause), CRUD via Web-UI (AP) ODER CLI
    - Lights: pin, channel, patternIndex, restOverrideMs, groupId, phase_ms
    - Gruppen an/aus (freeze der Zeit), Phasenverschiebung pro Ausgang
-   - Persistenz: /config.json (LittleFS)  +  WLAN-Hauptschalter wifi_enabled
+   - Persistenz: /config.json (LittleFS) + WLAN-Hauptschalter wifi_enabled
    - JsonDocument-API (ArduinoJson v7)
    ========================================================================= */
 
 /// -------------------- AP-/Netzwerk-Setup --------------------
-const char* AP_SSID = "Blaulicht-AP";
-const char* AP_PASS = "12345678";    // mind. 8 Zeichen
+const char* AP_SSID_DEFAULT = "Blaulicht-AP";
+const char* AP_PASS_DEFAULT = "12345678";          // >=8 Zeichen für WPA2
 const IPAddress AP_IP  (192,168,4,1);
 const IPAddress AP_GW  (192,168,4,1);
 const IPAddress AP_MASK(255,255,255,0);
 
 static WebServer server(80);
-static bool wifiEnabled = true;     // wird aus config.json geladen
+static bool wifiEnabled = true;     // aus config.json
 static bool serverRunning = false;  // interner Status
+
+// Konfigurierbare AP-Parameter (werden persistiert)
+static String apSsidCfg   = AP_SSID_DEFAULT;  // leer => Fallback auf Default
+static String apPassCfg   = AP_PASS_DEFAULT;  // leer => offener AP
+static String wifiModeCfg = "ap";             // aktuell nur "ap" unterstützt
 
 /// -------------------- LEDC-Konfiguration --------------------
 constexpr uint32_t LEDC_FREQ_HZ = 5000;
@@ -219,6 +226,12 @@ static bool saveConfig() {
   JsonDocument doc;
   doc["wifi_enabled"] = wifiEnabled;
 
+  // WiFi/AP-Settings
+  JsonObject jw = doc["wifi"].to<JsonObject>();
+  jw["mode"] = wifiModeCfg;
+  jw["ap"]["ssid"] = apSsidCfg;
+  jw["ap"]["password"] = apPassCfg;
+
   // patterns
   JsonArray jPatterns = doc["patterns"].to<JsonArray>();
   for (const auto &p : patterns) {
@@ -267,6 +280,11 @@ static bool loadConfig() {
 
   wifiEnabled = (bool)(doc["wifi_enabled"] | true);
 
+  // WiFi/AP-Settings laden (mit Defaults) – Achtung: | liefert const char*
+  wifiModeCfg = String((const char*)(doc["wifi"]["mode"] | "ap"));
+  apSsidCfg   = String((const char*)(doc["wifi"]["ap"]["ssid"] | AP_SSID_DEFAULT));
+  apPassCfg   = String((const char*)(doc["wifi"]["ap"]["password"] | AP_PASS_DEFAULT));
+
   patterns.clear(); groups.clear(); lights.clear();
 
   for (JsonObject jp : doc["patterns"].as<JsonArray>()) {
@@ -304,6 +322,9 @@ static bool loadConfig() {
 
 static void makeDefaultConfig() {
   wifiEnabled = true;
+  wifiModeCfg = "ap";
+  apSsidCfg   = AP_SSID_DEFAULT;
+  apPassCfg   = AP_PASS_DEFAULT;
 
   patterns.clear(); groups.clear(); lights.clear();
 
@@ -390,11 +411,22 @@ static void sendJSON(const String &json) {
   server.send(200, "application/json; charset=utf-8", json);
 }
 
+/// ---------- Vorwärtsdeklarationen ----------
+static void startWiFi();
+static void stopWiFi();
+
 /// -------------------- REST Endpoints --------------------
 static void handleGetConfig() {
   JsonDocument doc;
   doc["wifi_enabled"] = wifiEnabled;
 
+  // WiFi config zurückgeben
+  JsonObject jw = doc["wifi"].to<JsonObject>();
+  jw["mode"] = wifiModeCfg;
+  jw["ap"]["ssid"] = apSsidCfg;
+  jw["ap"]["password"] = apPassCfg; // Hinweis: in Produktivsystemen nicht im Klartext senden
+
+  // patterns
   JsonArray jPatterns = doc["patterns"].to<JsonArray>();
   for (const auto &p : patterns) {
     JsonObject jp = jPatterns.add<JsonObject>();
@@ -407,11 +439,13 @@ static void handleGetConfig() {
       js["fade"]        = st.fade;
     }
   }
+  // groups
   JsonArray jGroups = doc["groups"].to<JsonArray>();
   for (const auto &g : groups) {
     JsonObject jg = jGroups.add<JsonObject>();
     jg["id"] = g.id; jg["name"] = g.name; jg["enabled"] = g.enabled;
   }
+  // lights
   JsonArray jLights = doc["lights"].to<JsonArray>();
   for (const auto &L : lights) {
     JsonObject jl = jLights.add<JsonObject>();
@@ -422,10 +456,87 @@ static void handleGetConfig() {
     jl["groupId"]        = L.groupId;
     jl["phase_ms"]       = L.phase_ms;
   }
+
   String out; serializeJson(doc, out);
   sendJSON(out);
 }
 
+// /api/config: GET=lesen, PUT/POST=schreiben, OPTIONS=CORS
+static void handleConfigEndpoint() {
+  if (server.method() == HTTP_OPTIONS) {
+    addCORS(); server.send(204); return;
+  }
+  if (server.method() == HTTP_GET) { handleGetConfig(); return; }
+
+  // PUT oder POST -> speichern
+  if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
+
+  // wifi_enabled optional
+  if (doc["wifi_enabled"].is<bool>()) {
+    wifiEnabled = (bool)doc["wifi_enabled"];
+  }
+
+  // WiFi/AP-Settings optional (Frontend „AP, SSID/PW“)
+  if (doc["wifi"].is<JsonObject>()) {
+    if (doc["wifi"]["mode"].is<const char*>())
+      wifiModeCfg = doc["wifi"]["mode"].as<const char*>();
+
+    if (doc["wifi"]["ap"]["ssid"].is<const char*>())
+      apSsidCfg = doc["wifi"]["ap"]["ssid"].as<const char*>();
+
+    if (doc["wifi"]["ap"]["password"].is<const char*>())
+      apPassCfg = doc["wifi"]["ap"]["password"].as<const char*>();
+  }
+
+  // Patterns/Groups/Lights optional (nur übernehmen, wenn vorhanden)
+  if (doc["patterns"].is<JsonArray>()) {
+    patterns.clear();
+    for (JsonObject jp : doc["patterns"].as<JsonArray>()) {
+      Pattern p; p.name = jp["name"].as<const char*>();
+      for (JsonObject js : jp["steps"].as<JsonArray>()) {
+        LEDStep st;
+        st.duration_ms = (uint16_t)(js["duration_ms"] | 0);
+        st.level       = (uint8_t) (js["level"]       | 0);
+        st.fade        = (bool)    (js["fade"]        | false);
+        p.steps.push_back(st);
+      }
+      patterns.push_back(std::move(p));
+    }
+  }
+  if (doc["groups"].is<JsonArray>()) {
+    groups.clear();
+    for (JsonObject jg : doc["groups"].as<JsonArray>()) {
+      GroupCfg g;
+      g.id      = (int)(jg["id"]      | 0);
+      g.name    = jg["name"].as<const char*>();
+      g.enabled = (bool)(jg["enabled"] | true);
+      groups.push_back(std::move(g));
+    }
+  }
+  if (doc["lights"].is<JsonArray>()) {
+    lights.clear();
+    for (JsonObject jl : doc["lights"].as<JsonArray>()) {
+      LightCfg L;
+      L.pin            = (uint8_t)(jl["pin"]            | 255);
+      L.channel        = (uint8_t)(jl["channel"]        | 0);
+      L.patternIndex   = (uint8_t)(jl["patternIndex"]   | 0);
+      L.restOverrideMs = (int)     (jl["restOverrideMs"]| -1);
+      L.groupId        = (int)     (jl["groupId"]       | 0);
+      L.phase_ms       = (int)     (jl["phase_ms"]      | 0);
+      lights.push_back(std::move(L));
+    }
+    applyHardware();
+  }
+
+  bool ok = saveConfig();
+  addCORS();
+  server.send(ok?200:500, "text/plain", ok?"OK (saved)":"ERROR (save failed)");
+}
+
+// /api/sysinfo
 static void handleSysInfo() {
   JsonDocument doc;
   doc["max_ledc_channels"] = MAX_LEDC_CHANNELS;
@@ -436,87 +547,46 @@ static void handleSysInfo() {
   sendJSON(out);
 }
 
-// /api/wifi: GET=Status, PUT/POST=setzen, OPTIONS=CORS
+// /api/wifi: GET=Status, PUT/POST=ein/aus, OPTIONS=CORS (legacy toggle)
 static void handleWifiEndpoint() {
   if (server.method() == HTTP_OPTIONS) {
-    addCORS();
-    server.send(204); // No Content
-    return;
+    addCORS(); server.send(204); return;
   }
-
   if (server.method() == HTTP_GET) {
-    JsonDocument d; d["enabled"] = wifiEnabled; d["ip"] = WiFi.softAPIP().toString();
+    JsonDocument d; 
+    d["enabled"] = wifiEnabled; 
+    d["mode"]    = wifiModeCfg;
+    d["ssid"]    = apSsidCfg;
+    d["ip"]      = WiFi.softAPIP().toString();
     String out; serializeJson(d, out); sendJSON(out); return;
   }
-
   if (server.method() == HTTP_PUT || server.method() == HTTP_POST) {
-    if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
-    JsonDocument d;
+    if (!server.hasArg("plain")) { addCORS(); server.send(400,"text/plain","Missing body"); return; }
+    JsonDocument d; 
     DeserializationError err = deserializeJson(d, server.arg("plain"));
-    if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
-    bool want = (bool)(d["enabled"] | wifiEnabled);
-    if (want != wifiEnabled) {
-      wifiEnabled = want;
-      saveConfig();
-      if (wifiEnabled) startWiFi(); else stopWiFi();
-    }
+    if (err) { addCORS(); server.send(400,"text/plain", String("JSON error: ")+err.c_str()); return; }
+
+    if (d["enabled"].is<bool>()) wifiEnabled = (bool)d["enabled"];
+    if (d["mode"].is<const char*>()) wifiModeCfg = d["mode"].as<const char*>();
+    if (d["ssid"].is<const char*>()) apSsidCfg   = d["ssid"].as<const char*>();
+    if (d["password"].is<const char*>()) apPassCfg = d["password"].as<const char*>();
+
+    saveConfig();
+    if (wifiEnabled) startWiFi(); else stopWiFi();
+
     JsonDocument r; r["enabled"] = wifiEnabled;
     String out; serializeJson(r, out); sendJSON(out); return;
   }
-
-  addCORS();
-  server.send(405, "text/plain", "Method Not Allowed");
+  addCORS(); server.send(405, "text/plain", "Method Not Allowed");
 }
 
-static void handlePutConfig() {
+// /api/reboot: POST/ANY -> Neustart
+static void handleReboot() {
   if (server.method() == HTTP_OPTIONS) { addCORS(); server.send(204); return; }
-
-  if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, server.arg("plain"));
-  if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
-
-  if (!doc["patterns"].is<JsonArray>() || !doc["lights"].is<JsonArray>() || !doc["groups"].is<JsonArray>()) {
-    addCORS(); server.send(400,"text/plain","Invalid JSON structure"); return;
-  }
-
-  // RAM übernehmen
-  patterns.clear(); groups.clear(); lights.clear();
-  wifiEnabled = (bool)(doc["wifi_enabled"] | wifiEnabled);
-
-  for (JsonObject jp : doc["patterns"].as<JsonArray>()) {
-    Pattern p; p.name = jp["name"].as<const char*>();
-    for (JsonObject js : jp["steps"].as<JsonArray>()) {
-      LEDStep st;
-      st.duration_ms = (uint16_t)(js["duration_ms"] | 0);
-      st.level       = (uint8_t) (js["level"]       | 0);
-      st.fade        = (bool)    (js["fade"]        | false);
-      p.steps.push_back(st);
-    }
-    patterns.push_back(std::move(p));
-  }
-  for (JsonObject jg : doc["groups"].as<JsonArray>()) {
-    GroupCfg g;
-    g.id      = (int)(jg["id"]      | 0);
-    g.name    = jg["name"].as<const char*>();
-    g.enabled = (bool)(jg["enabled"] | true);
-    groups.push_back(std::move(g));
-  }
-  for (JsonObject jl : doc["lights"].as<JsonArray>()) {
-    LightCfg L;
-    L.pin            = (uint8_t)(jl["pin"]            | 255);
-    L.channel        = (uint8_t)(jl["channel"]        | 0);
-    L.patternIndex   = (uint8_t)(jl["patternIndex"]   | 0);
-    L.restOverrideMs = (int)     (jl["restOverrideMs"]| -1);
-    L.groupId        = (int)     (jl["groupId"]       | 0);
-    L.phase_ms       = (int)     (jl["phase_ms"]      | 0);
-    lights.push_back(std::move(L));
-  }
-
-  applyHardware();
-  bool ok = saveConfig();
   addCORS();
-  server.send(ok?200:500, "text/plain", ok?"OK (saved)":"ERROR (save failed)");
+  server.send(200, "text/plain", "Rebooting");
+  delay(100);
+  ESP.restart();
 }
 
 /// -------------------- WLAN Start/Stop + Server Start/Stop --------------------
@@ -524,21 +594,17 @@ static void startServerRoutes() {
   server.on("/", HTTP_GET, [](){
     if (!handleFileRead("/index.html")) server.send(404,"text/plain","index.html not found");
   });
-
-  // Static file helper endpoints
   server.on("/favicon.ico", HTTP_GET, [](){
-    if (!handleFileRead("/favicon.ico")) server.send(204); // kein Inhalt -> kein Fehler-Log
+    if (!handleFileRead("/favicon.ico")) server.send(204);
   });
 
-  // API Endpoints
-  server.on("/api/config",  HTTP_GET, handleGetConfig);
-  server.on("/api/config",  HTTP_PUT, handlePutConfig);
+  server.on("/api/config",  HTTP_ANY, handleConfigEndpoint);
   server.on("/api/sysinfo", HTTP_GET, handleSysInfo);
-  server.on("/api/wifi",    HTTP_ANY, handleWifiEndpoint); // <-- robust gegen GET/PUT/POST/OPTIONS
+  server.on("/api/wifi",    HTTP_ANY, handleWifiEndpoint);
+  server.on("/api/reboot",  HTTP_ANY, handleReboot);
 
   server.onNotFound([](){
     String path = server.uri();
-    // Für /api/... kein FS-Fallback -> klares 404-JSON
     if (path.startsWith("/api/")) {
       JsonDocument d; d["ok"]=false; d["error"]="API route not found"; d["path"]=path;
       String out; serializeJson(d, out);
@@ -546,24 +612,45 @@ static void startServerRoutes() {
       server.send(404, "application/json; charset=utf-8", out);
       return;
     }
-    // Static files
     if (handleFileRead(path)) return;
     server.send(404, "text/plain", "Not found");
   });
 }
 
 static void startWiFi() {
-  if (serverRunning) return;
+  if (serverRunning) {
+    server.stop();
+    WiFi.softAPdisconnect(true);
+    serverRunning = false;
+  }
+
   WiFi.mode(WIFI_AP);
   WiFi.softAPConfig(AP_IP, AP_GW, AP_MASK);
-  bool apok = WiFi.softAP(AP_SSID, AP_PASS);
+
+  // Fallbacks: leere SSID -> Default-SSID; leeres Passwort -> offener AP
+  String ssid = apSsidCfg.length() ? apSsidCfg : String(AP_SSID_DEFAULT);
+  String pass = apPassCfg; // darf leer sein für offenen AP
+
+  bool apok = false;
+  if (pass.length() == 0) {
+    apok = WiFi.softAP(ssid.c_str()); // offener AP
+  } else if (pass.length() >= 8) {
+    apok = WiFi.softAP(ssid.c_str(), pass.c_str()); // WPA2
+  } else {
+    Serial.println("Warnung: Passwort < 8 Zeichen -> starte offenen AP.");
+    apok = WiFi.softAP(ssid.c_str());
+  }
+
   WiFi.setSleep(true);
   WiFi.setTxPower(WIFI_POWER_5dBm); // moderat reduziert
-  Serial.printf("AP gestartet: %s (%s), ok=%d\n", AP_SSID, WiFi.softAPIP().toString().c_str(), apok);
+
+  Serial.printf("AP gestartet: SSID='%s' (%s), ok=%d\n", ssid.c_str(), WiFi.softAPIP().toString().c_str(), apok);
+
   startServerRoutes();
   server.begin();
   serverRunning = true;
 }
+
 static void stopWiFi() {
   if (serverRunning) {
     server.stop();
@@ -586,6 +673,7 @@ static void cliHelp() {
     "load                              : Konfiguration neu laden\n"
     "reboot                            : Neustart\n"
     "wifi on|off                       : WLAN/Webserver einschalten/abschalten (persistent)\n"
+    "wifi set ap <ssid> <password>     : AP-SSID/PW setzen (PW leer => offener AP)\n"
     "\n-- Gruppen --\n"
     "group list                        : Gruppen anzeigen\n"
     "group add <id> <name>             : Gruppe anlegen (enabled=1)\n"
@@ -611,6 +699,7 @@ static long asLong(const String& s, long def=0){ char* e=nullptr; long v=strtol(
 
 static void cliStatus() {
   Serial.printf("wifi_enabled: %s, serverRunning: %d\n", wifiEnabled?"true":"false", (int)serverRunning);
+  Serial.printf("wifi.mode='%s' ssid='%s' (pw:%s)\n", wifiModeCfg.c_str(), apSsidCfg.c_str(), apPassCfg.length()?"***":"<open>");
   Serial.printf("patterns: %u, groups: %u, lights: %u\n", (unsigned)patterns.size(), (unsigned)groups.size(), (unsigned)lights.size());
 }
 
@@ -632,8 +721,7 @@ static void cliLightList() {
 
 static void cliApplyAndMaybeStartWifi() {
   applyHardware();
-  if (wifiEnabled && !serverRunning) startWiFi();
-  if (!wifiEnabled && serverRunning) stopWiFi();
+  if (wifiEnabled) startWiFi(); else stopWiFi();
 }
 
 static void handleCliLine(const String& line) {
@@ -652,10 +740,18 @@ static void handleCliLine(const String& line) {
 
   // wifi on/off
   if (cmd=="wifi" && t.size()>=2) {
-    String v = t[1]; v.toLowerCase();
-    if (v=="on")  { wifiEnabled=true; saveConfig(); startWiFi(); Serial.println("WiFi ON."); }
-    else if (v=="off"){ wifiEnabled=false; saveConfig(); stopWiFi(); Serial.println("WiFi OFF."); }
-    else Serial.println("Usage: wifi on|off");
+    String sub = t[1]; sub.toLowerCase();
+    if (sub=="on")  { wifiEnabled=true; saveConfig(); startWiFi(); Serial.println("WiFi ON."); return; }
+    if (sub=="off") { wifiEnabled=false; saveConfig(); stopWiFi();  Serial.println("WiFi OFF."); return; }
+    if (sub=="set" && t.size()>=5 && t[2]=="ap") {
+      apSsidCfg = t[3];
+      apPassCfg = t[4]; // darf leer sein -> offener AP
+      saveConfig();
+      if (wifiEnabled) startWiFi();
+      Serial.println("AP-Settings aktualisiert.");
+      return;
+    }
+    Serial.println("Usage: wifi on|off | wifi set ap <ssid> <password>");
     return;
   }
 
