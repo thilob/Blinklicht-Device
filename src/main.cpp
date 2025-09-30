@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <FS.h>
@@ -13,8 +14,8 @@
    - Mehrere Patterns (letzter Step = Ruhepause), CRUD via Web-UI (AP/STA) ODER CLI
    - Lights: pin, channel, patternIndex, restOverrideMs, groupId, phase_ms
    - Gruppen an/aus (freeze der Zeit), Phasenverschiebung pro Ausgang
-   - Persistenz: /config.json (LittleFS)  +  WLAN-Schalter wifi_enabled
-   - WLAN: AP (eindeutige SSID) / STA (DHCP + mDNS Hostname)
+   - Persistenz: /config.json (LittleFS)
+   - WLAN: AP (eindeutige SSID + Captive Portal) / STA (DHCP + mDNS Hostname)
    - JsonDocument-API (ArduinoJson v7)
    ========================================================================= */
 
@@ -85,6 +86,8 @@ static String hostName     = "";      // mDNS/Hostname (z. B. "blaulicht-xxxx")
 
 static WebServer server(80);
 static bool serverRunning = false;
+// Captive-DNS (nur im AP-Modus aktiv)
+static DNSServer dnsServer;
 
 /// -------------------- Helpers --------------------
 static bool isGroupEnabled(int gid) {
@@ -97,11 +100,9 @@ static String uniqueMacSuffix() {
   char buf[7]; snprintf(buf, sizeof(buf), "%02X%02X%02X", mac[3], mac[4], mac[5]);
   return String(buf);
 }
-
 static String makeDefaultApSsid() {
   return String("Blaulicht-") + uniqueMacSuffix();
 }
-
 static void sanitizeHostName(String &hn) {
   hn.toLowerCase();
   for (size_t i=0;i<hn.length();++i) {
@@ -574,41 +575,36 @@ static void handlePutConfig() {
   applyHardware();
 
   if (wifiEnabled) {
-    // Re-konfigurieren
     if (serverRunning) { server.stop(); serverRunning=false; }
-    // Neustart des WLANs je nach Modus
-    // (startWiFi() setzt alles – s.u.)
+    // bewusst erst nach Antwort neu starten
   } else {
     if (serverRunning) { server.stop(); serverRunning=false; }
     WiFi.mode(WIFI_OFF);
+    dnsServer.stop();
+    MDNS.end();
   }
 
   bool ok = saveConfig();
 
-  // WLAN neu starten (je nach cfg)
+  // Vorbereiten auf WLAN-Restart (neue SSID/Passwörter)
   if (wifiEnabled) {
-    // bewusst nach saveConfig(), damit neue SSID/Passwörter gelten
-    // (Start inkl. DHCP im STA-Modus)
-    // Vorher hart stoppen, um Reste zu vermeiden:
     WiFi.softAPdisconnect(true);
     WiFi.disconnect(true, true);
   }
 
-  // Antwort zuerst senden, danach neu starten, um den HTTP-Ablauf nicht zu unterbrechen
+  // Antwort zuerst senden
   addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (saved)":"ERROR (save failed)");
 
-  // Nach kurzer Verzögerung WLAN starten
+  // Dann WLAN gemäß Config neu starten
   delay(50);
   if (wifiEnabled) {
-    // startWiFi holt DHCP im STA
-    // und registriert Routen + server.begin()
-    // (Definition unten)
+    // DHCP im STA-Modus wird im startWiFi() erzwungen
     extern void startWiFi();
     startWiFi();
   }
 }
 
-/// -------------------- WIFI Start/Stop --------------------
+/// -------------------- WIFI Start/Stop + Routen --------------------
 static void startServerRoutes() {
   // Favicon & Touch-Icons -> leere 204-Antwort
   auto noContent = [](){ addCORS(); server.send(204, "text/plain", ""); };
@@ -620,6 +616,29 @@ static void startServerRoutes() {
   server.on("/", HTTP_GET, [](){
     if (handleCaptivePortalRedirect()) return;
     if (!handleFileRead("/index.html")) { addCORS(); server.send(404,"text/plain","index.html not found"); }
+  });
+
+  // ---- Captive-Portal Connectivity Checks ----
+  server.on("/generate_204", HTTP_ANY, [](){
+    if (isAPModeActive()) { server.sendHeader("Location","/"); addCORS(); server.send(302, ""); }
+    else { addCORS(); server.send(204); }
+  });
+  server.on("/hotspot-detect.html", HTTP_ANY, [](){
+    if (isAPModeActive()) {
+      addCORS();
+      server.send(200, "text/html",
+        "<!doctype html><meta charset=utf-8>"
+        "<title>Blaulicht-Controller</title>"
+        "<p>Verbunden. <a href='/'>Zur Konfiguration</a></p>");
+    } else { addCORS(); server.send(404,"text/plain","Not AP"); }
+  });
+  server.on("/ncsi.txt", HTTP_ANY, [](){
+    if (isAPModeActive()) { server.sendHeader("Location","/"); addCORS(); server.send(302,""); }
+    else { addCORS(); server.send(404); }
+  });
+  server.on("/connecttest.txt", HTTP_ANY, [](){
+    if (isAPModeActive()) { server.sendHeader("Location","/"); addCORS(); server.send(302,""); }
+    else { addCORS(); server.send(404); }
   });
 
   // APIs
@@ -641,6 +660,13 @@ static void startServerRoutes() {
     if (server.method() == HTTP_OPTIONS) { addCORS(); server.send(204); return; }
     if (handleCaptivePortalRedirect()) return;
     String path = server.uri();
+    // Im AP-Modus: unbekannte (Nicht-/api/*) Pfade auf "/" umleiten
+    if (isAPModeActive() && !path.startsWith("/api/")) {
+      if (handleFileRead(path)) return;
+      server.sendHeader("Location","/");
+      addCORS(); server.send(302,"");
+      return;
+    }
     if (handleFileRead(path)) return;
     addCORS();
     server.send(404, "text/plain", "Not found");
@@ -655,26 +681,21 @@ static void stopWiFi() {
   WiFi.softAPdisconnect(true);
   WiFi.disconnect(true, true);
   WiFi.mode(WIFI_OFF);
+  dnsServer.stop();
   MDNS.end();
   Serial.println("WLAN/Server gestoppt.");
 }
 
 void startWiFi() {
-  // Hostname bestimmen
+  // Hostname bestimmen (aus AP-SSID generiert, falls leer)
   String base = apSsidCfg.length()?apSsidCfg:makeDefaultApSsid();
-  // Hostname ohne Leerzeichen/Sonderzeichen und in Kleinbuchstaben
-  hostName = base;
-  hostName.replace(" ", "-");
-  sanitizeHostName(hostName);
+  hostName = base; hostName.replace(" ", "-"); sanitizeHostName(hostName);
 
-  if (!wifiEnabled) {
-    stopWiFi();
-    return;
-  }
+  if (!wifiEnabled) { stopWiFi(); return; }
 
-  // STA-Modus
+  // STA-Modus?
   if (wifiModeCfg == "sta" && staSsidCfg.length()) {
-    stopWiFi(); // sicherstellen, dass alles sauber startet
+    stopWiFi();
     WiFi.mode(WIFI_STA);
 
     // DHCP erzwingen (setzt IP/GW/Subnet auf 0)
@@ -704,7 +725,7 @@ void startWiFi() {
 
   // AP-Modus (Fallback oder explizit)
   if (wifiModeCfg == "ap") {
-    stopWiFi(); // sicherheitshalber
+    stopWiFi();
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(AP_IP, AP_GW, AP_MASK);
     String ssid = apSsidCfg.length()?apSsidCfg:makeDefaultApSsid();
@@ -712,7 +733,9 @@ void startWiFi() {
     WiFi.setSleep(true);
     WiFi.setTxPower(WIFI_POWER_5dBm); // moderater TX-Pegel
     Serial.printf("AP gestartet: %s (%s), ok=%d\n", WiFi.SSID().c_str(), WiFi.softAPIP().toString().c_str(), apok);
-    // mDNS im AP-Modus wird oft nicht unterstützt -> weglassen
+    // Captive-DNS: alle Hostnamen -> AP-IP auflösen
+    dnsServer.start(53, "*", AP_IP);
+    // mDNS im AP-Modus weglassen (von Clients oft nicht beachtet)
   }
 
   startServerRoutes();
@@ -1002,7 +1025,10 @@ void setup() {
 }
 
 void loop() {
-  if (serverRunning) server.handleClient();
+  if (serverRunning) {
+    if (isAPModeActive()) dnsServer.processNextRequest(); // Captive DNS
+    server.handleClient();
+  }
 
   size_t n = min<size_t>(8, lights.size());
   for (size_t i = 0; i < n; ++i) players[i].update();

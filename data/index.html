@@ -3,342 +3,432 @@
 <head>
   <meta charset="utf-8">
   <title>Blaulicht-Controller</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root { --bg:#0b0f15; --card:#151b23; --ink:#e9eef5; --muted:#a8b3c5; --accent:#4da3ff; --ok:#2ecc71; --warn:#f39c12; --err:#e74c3c; }
-    * { box-sizing: border-box; }
-    body { margin:0; font:16px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--ink); }
-    header { padding:16px; display:flex; align-items:center; justify-content:space-between; background:#0f141b; position:sticky; top:0; z-index:10; }
-    h1 { font-size:18px; margin:0; }
-    .container { padding:16px; display:grid; gap:16px; grid-template-columns: 1fr; }
-    @media (min-width: 900px) { .container { grid-template-columns: 1fr 1fr; } }
-    section { background:var(--card); border-radius:12px; padding:16px; box-shadow:0 2px 12px rgba(0,0,0,.25); }
-    section h2 { margin:0 0 12px; font-size:18px; }
-    label { display:block; font-size:12px; color:var(--muted); margin-top:10px; }
-    input, select { width:100%; padding:10px; margin-top:6px; border-radius:8px; border:1px solid #273142; background:#0f141b; color:var(--ink); }
-    input[type="checkbox"] { width:auto; transform:scale(1.2); margin-right:8px; }
-    .row { display:grid; gap:8px; grid-template-columns: 1fr 1fr; }
-    .row3 { display:grid; gap:8px; grid-template-columns: 1fr 1fr 1fr; }
-    .btn { background:#1a2330; color:var(--ink); border:1px solid #2b3a4f; padding:10px 12px; border-radius:8px; cursor:pointer; }
-    .btn:hover { background:#223044; }
-    .btnPrimary { background:var(--accent); color:#001326; border:none; }
-    .btnDanger { background:#2a1717; border:1px solid #6b1f1f; color:#ffdede; }
-    .list { margin-top:8px; display:flex; flex-direction:column; gap:8px; }
-    .item { display:flex; gap:12px; align-items:center; justify-content:space-between; background:#0f141b; border:1px solid #273142; padding:10px; border-radius:8px; }
-    .item small { color:var(--muted); }
-    .pill { padding:2px 8px; border-radius:999px; background:#112034; border:1px solid #2b3a4f; color:#b6d7ff; font-size:12px; }
-    .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:#0f141b; color:var(--ink); border:1px solid #2b3a4f; padding:12px 14px; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,.4); display:none; }
-    .grid2 { display:grid; gap:8px; grid-template-columns: 1fr 1fr; }
-    .muted { color:var(--muted); }
-    code { background:#0f141b; padding:2px 6px; border-radius:6px; border:1px solid #273142; }
+    :root{
+      --bg:#0f172a; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22d3ee; --bad:#ef4444; --good:#22c55e;
+      --border:#1f2937;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+    header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+    header h1{margin:0;font-size:18px;font-weight:600}
+    header .pill{font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
+    main{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr;gap:16px}
+    @media(min-width:900px){main{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+    h2{margin:0 0 12px 0;font-size:16px}
+    label{font-size:12px;color:var(--muted)}
+    input,select,button,textarea{
+      width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);
+    }
+    input[type="checkbox"]{width:auto}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .mt8{margin-top:8px}
+    .mt12{margin-top:12px}
+    .mt16{margin-top:16px}
+    .muted{color:var(--muted);font-size:12px}
+    .btn{cursor:pointer}
+    .btn.primary{background:linear-gradient(90deg,#06b6d4,#22d3ee);border:none;color:#001018;font-weight:600}
+    .btn.danger{background:#3b0f13;border-color:#651b1f;color:#fecaca}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid var(--border);padding:8px;text-align:left;font-size:14px}
+    th{color:#9ca3af}
+    .flex{display:flex;gap:8px;align-items:center}
+    .right{justify-content:flex-end}
+    .ok{color:var(--good)} .bad{color:var(--bad)}
+    .tag{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:2px 8px;font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
-<header>
-  <h1>🚨 Blaulicht-Controller</h1>
-  <div>
-    <button id="btnReload" class="btn">Neu laden</button>
-    <button id="btnApply" class="btn btnPrimary">Speichern & anwenden</button>
-  </div>
-</header>
+  <header>
+    <h1>🚨 Blaulicht-Controller</h1>
+    <span id="badgeMode" class="pill">…</span>
+    <span id="badgeHost" class="pill">…</span>
+  </header>
 
-<div class="container">
-  <section>
-    <h2>WLAN</h2>
-    <label><input type="checkbox" id="wifiEnabled"> WLAN aktiv</label>
-    <label>Modus</label>
-    <select id="wifiMode">
-      <option value="ap">Access Point</option>
-      <option value="sta">Station (Client)</option>
-    </select>
-    <div class="row">
-      <div>
-        <label>AP SSID</label>
-        <input id="apSsid" placeholder="Blaulicht-XXXX">
+  <main>
+    <!-- WLAN -->
+    <section class="card">
+      <h2>WLAN</h2>
+      <div class="row">
+        <div>
+          <label><input type="checkbox" id="wifi_enabled"> WLAN aktiv</label>
+        </div>
+        <div>
+          <label for="wifi_mode">Modus</label>
+          <select id="wifi_mode">
+            <option value="ap">Access Point</option>
+            <option value="sta">Station (Client)</option>
+          </select>
+        </div>
       </div>
-      <div>
-        <label>AP Passwort (leer = offen)</label>
-        <input id="apPass" type="password" placeholder="">
+
+      <div class="row mt12">
+        <div>
+          <label for="ap_ssid">AP SSID</label>
+          <input id="ap_ssid" placeholder="leer = automatisch">
+        </div>
+        <div>
+          <label for="ap_pass">AP Passwort (optional)</label>
+          <input id="ap_pass" placeholder="leer = offen">
+        </div>
       </div>
-    </div>
-    <div class="row">
-      <div>
-        <label>STA SSID</label>
-        <input id="staSsid">
+
+      <div class="row mt12">
+        <div>
+          <label for="sta_ssid">STA SSID</label>
+          <input id="sta_ssid" placeholder="WLAN-Name des Routers">
+        </div>
+        <div>
+          <label for="sta_pass">STA Passwort</label>
+          <input id="sta_pass" placeholder="WLAN-Passwort">
+        </div>
       </div>
-      <div>
-        <label>STA Passwort</label>
-        <input id="staPass" type="password">
+
+      <div class="flex right mt16">
+        <button class="btn" id="btnReload">Status aktualisieren</button>
+        <button class="btn primary" id="btnSaveWifi">Speichern & Anwenden</button>
       </div>
-    </div>
-    <p class="muted" id="wifiHint"></p>
-  </section>
+      <p class="muted mt8">Im STA-Modus ist die Weboberfläche zusätzlich unter <b>http://&lt;hostname&gt;.local</b> erreichbar (mDNS).</p>
+    </section>
 
-  <section>
-    <h2>System</h2>
-    <div id="sysinfo" class="grid2 muted"></div>
-    <div style="margin-top:10px; display:flex; gap:8px;">
-      <button id="btnReboot" class="btn">Neustart</button>
-      <button id="btnDhcp" class="btn">DHCP erneuern (STA)</button>
-    </div>
-    <p class="muted" style="margin-top:8px;">Im STA-Modus kannst du die Seite meist auch über <code>http://&lt;hostname&gt;.local/</code> öffnen.</p>
-  </section>
+    <!-- Gruppen -->
+    <section class="card">
+      <h2>Gruppen</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Name</th><th>Aktiv</th><th></th></tr></thead>
+        <tbody id="tblGroups"></tbody>
+      </table>
+      <div class="row mt12">
+        <input id="g_id" placeholder="ID (Zahl)">
+        <input id="g_name" placeholder="Name">
+      </div>
+      <div class="flex right mt12">
+        <button class="btn" id="btnGroupAdd">Gruppe anlegen</button>
+      </div>
+    </section>
 
-  <section>
-    <h2>Gruppen</h2>
-    <div class="row">
-      <input id="gId" type="number" placeholder="ID">
-      <input id="gName" placeholder="Name">
-    </div>
-    <label><input type="checkbox" id="gEnabled" checked> Gruppe eingeschaltet</label>
-    <div style="margin-top:8px; display:flex; gap:8px;">
-      <button id="btnGroupAdd" class="btn">Gruppe hinzufügen/ersetzen</button>
-      <button id="btnGroupDel" class="btn btnDanger">Gruppe löschen</button>
-    </div>
-    <div id="groupList" class="list"></div>
-  </section>
+    <!-- Patterns -->
+    <section class="card">
+      <h2>Patterns</h2>
+      <div class="row">
+        <div>
+          <label for="pat_name">Pattern-Name</label>
+          <input id="pat_name" placeholder="z. B. DoppelStrobe">
+        </div>
+        <div class="flex right">
+          <button class="btn" id="btnPatAdd">Leeres Pattern anlegen</button>
+        </div>
+      </div>
 
-  <section>
-    <h2>Patterns</h2>
-    <div class="row">
-      <input id="pName" placeholder="Pattern-Name">
-      <button id="btnPatternAdd" class="btn">Pattern anlegen</button>
-    </div>
-    <div id="patternList" class="list"></div>
-  </section>
+      <div class="mt12">
+        <table>
+          <thead><tr><th>#</th><th>Name</th><th>Steps</th><th></th></tr></thead>
+          <tbody id="tblPat"></tbody>
+        </table>
+      </div>
 
-  <section style="grid-column:1/-1">
-    <h2>Lights (Ausgänge)</h2>
-    <div class="row3">
-      <input id="lIdx" type="number" placeholder="Index (optional)">
-      <input id="lPin" type="number" placeholder="Pin">
-      <input id="lCh" type="number" placeholder="LEDC-Kanal">
-    </div>
-    <div class="row3">
-      <input id="lPat" type="number" placeholder="Pattern-Index">
-      <input id="lRest" type="number" placeholder="Rest-Override ms (-1)">
-      <input id="lGid" type="number" placeholder="Group-ID">
-    </div>
-    <div class="row">
-      <input id="lPhase" type="number" placeholder="Phasenverschiebung ms">
-      <button id="btnLightAdd" class="btn">Ausgang hinzufügen/ersetzen</button>
-      <button id="btnLightDel" class="btn btnDanger">Ausgang löschen (Index)</button>
-    </div>
-    <div id="lightList" class="list"></div>
-  </section>
-</div>
+      <div class="mt12">
+        <h3 style="margin:0 0 8px 0;font-size:14px;color:#9ca3af">Steps in ausgewähltem Pattern</h3>
+        <div class="row3">
+          <input id="st_dur" placeholder="Dauer ms">
+          <input id="st_lvl" placeholder="Level 0..255">
+          <select id="st_fade"><option value="0">hart</option><option value="1">weich</option></select>
+        </div>
+        <div class="flex right mt12">
+          <button class="btn" id="btnStepAdd">Step hinzufügen</button>
+        </div>
+        <table class="mt12">
+          <thead><tr><th>#</th><th>Dauer</th><th>Level</th><th>Fade</th><th></th></tr></thead>
+          <tbody id="tblSteps"></tbody>
+        </table>
+      </div>
+    </section>
 
-<div id="toast" class="toast"></div>
+    <!-- Lights -->
+    <section class="card">
+      <h2>Ausgänge</h2>
+      <table>
+        <thead><tr><th>#</th><th>Pin</th><th>Ch</th><th>Pat</th><th>Rest</th><th>Grp</th><th>Phase</th><th></th></tr></thead>
+        <tbody id="tblLights"></tbody>
+      </table>
 
-<script>
-let cfg = null;
+      <div class="row3 mt12">
+        <input id="l_pin"   placeholder="Pin">
+        <input id="l_ch"    placeholder="LEDC">
+        <input id="l_pidx"  placeholder="Pattern">
+      </div>
+      <div class="row3 mt12">
+        <input id="l_rest"  placeholder="Rest ms (-1)">
+        <input id="l_gid"   placeholder="Gruppe-ID">
+        <input id="l_phase" placeholder="Phase ms">
+      </div>
+      <div class="flex right mt12">
+        <button class="btn" id="btnLightAdd">Ausgang anlegen</button>
+      </div>
+    </section>
 
-function toast(msg, kind="info"){
-  const t=document.getElementById('toast');
-  t.textContent = msg;
-  t.style.display='block';
-  t.style.borderColor = kind==="error" ? "#e74c3c" : (kind==="warn"?"#f39c12":"#2b3a4f");
-  setTimeout(()=>t.style.display='none', 2500);
-}
+    <!-- Aktionen -->
+    <section class="card">
+      <h2>Aktionen</h2>
+      <div class="flex right">
+        <button class="btn danger" id="btnReloadPage">Seite neu laden</button>
+      </div>
+      <p class="muted mt8">
+        Speichern & Anwenden bei WLAN ändert ggf. den Modus (AP/STA). Im STA-Modus
+        ist die Seite unter <code>http://&lt;hostname&gt;.local/</code> erreichbar.
+      </p>
+    </section>
+  </main>
 
-async function loadConfig(){
-  const r = await fetch('/api/config');
-  if(!r.ok){ toast('Config laden fehlgeschlagen','error'); return; }
-  cfg = await r.json();
-  render();
-  await loadSysInfo();
-}
+  <script>
+  const $ = sel => document.querySelector(sel);
+  let cfg = null;
+  let selectedPattern = 0;
 
-async function loadSysInfo(){
-  const r = await fetch('/api/sysinfo');
-  if(!r.ok) return;
-  const s = await r.json();
-  const el = document.getElementById('sysinfo');
-  el.innerHTML = `
-    <div>LEDC Kanäle gesamt<br><b>${s.max_ledc_channels}</b></div>
-    <div>Frequenz<br><b>${s.ledc_freq_hz} Hz</b></div>
-    <div>Auflösung<br><b>${s.ledc_res_bits} Bit</b></div>
-    <div>Lights im Einsatz<br><b>${s.num_lights}</b></div>
-  `;
-}
-
-function render(){
-  // WLAN
-  document.getElementById('wifiEnabled').checked = !!cfg.wifi.enabled;
-  document.getElementById('wifiMode').value = cfg.wifi.mode || "ap";
-  document.getElementById('apSsid').value = cfg.wifi.ap?.ssid || "";
-  document.getElementById('apPass').value = cfg.wifi.ap?.password || "";
-  document.getElementById('staSsid').value = cfg.wifi.sta?.ssid || "";
-  document.getElementById('staPass').value = cfg.wifi.sta?.password || "";
-
-  const hint = document.getElementById('wifiHint');
-  if (cfg.wifi.mode === 'sta') {
-    hint.textContent = "Hinweis: Nach Anwenden verbindet sich das Gerät mit deinem WLAN. Öffne dann die Seite über die neue IP oder http://<hostname>.local/";
-  } else {
-    hint.textContent = "Der Access-Point ist direkt erreichbar. AP-Passwort leer = offenes WLAN.";
+  async function apiGet(){
+    const r = await fetch('/api/config');
+    if(!r.ok) throw new Error('GET /api/config failed');
+    return await r.json();
   }
-
-  // Gruppen
-  const gl = document.getElementById('groupList');
-  gl.innerHTML = (cfg.groups||[]).map(g=>`
-    <div class="item">
-      <div><b>${g.name}</b> <span class="pill">id=${g.id}</span> <small>${g.enabled?"ON":"OFF"}</small></div>
-      <button class="btn" onclick="prefillGroup(${g.id})">Bearbeiten…</button>
-    </div>
-  `).join('') || '<div class="muted">Keine Gruppen.</div>';
-
-  // Patterns
-  const pl = document.getElementById('patternList');
-  pl.innerHTML = (cfg.patterns||[]).map((p,i)=>{
-    const steps = (p.steps||[]).map((s,si)=>`<li><code>#${si}</code> dur=${s.duration_ms}ms lvl=${s.level} fade=${s.fade}</li>`).join('');
-    return `
-      <div class="item" style="align-items:flex-start">
-        <div style="flex:1">
-          <div><b>[${i}] ${p.name}</b></div>
-          <ul class="muted" style="margin:6px 0 0 0; padding-left:18px">${steps||"<li>leer</li>"}</ul>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <button class="btn" onclick="addStep(${i})">Step +</button>
-          <button class="btn" onclick="editStep(${i})">Step ändern</button>
-          <button class="btn btnDanger" onclick="delPattern(${i})">Pattern löschen</button>
-        </div>
-      </div>
-    `;
-  }).join('') || '<div class="muted">Keine Patterns.</div>';
-
-  // Lights
-  const ll = document.getElementById('lightList');
-  ll.innerHTML = (cfg.lights||[]).map((L,i)=>`
-    <div class="item">
-      <div>
-        <b>L${i}</b> <span class="pill">pin=${L.pin}</span>
-        <span class="pill">ch=${L.channel}</span>
-        <span class="pill">pat=${L.patternIndex}</span>
-        <span class="pill">rest=${L.restOverrideMs}</span>
-        <span class="pill">gid=${L.groupId}</span>
-        <span class="pill">phase=${L.phase_ms}</span>
-      </div>
-      <button class="btn" onclick="prefillLight(${i})">Bearbeiten…</button>
-    </div>
-  `).join('') || '<div class="muted">Keine Ausgänge.</div>';
-}
-
-// ------- Gruppen UI -------
-function prefillGroup(id){
-  const g=(cfg.groups||[]).find(x=>x.id==id); if(!g) return;
-  document.getElementById('gId').value = g.id;
-  document.getElementById('gName').value = g.name;
-  document.getElementById('gEnabled').checked = !!g.enabled;
-}
-document.getElementById('btnGroupAdd').onclick = ()=>{
-  const id = parseInt(document.getElementById('gId').value||0,10);
-  const name = document.getElementById('gName').value||"Gruppe";
-  const en = document.getElementById('gEnabled').checked;
-  if(!cfg.groups) cfg.groups=[];
-  let g = cfg.groups.find(x=>x.id===id);
-  if (g) { g.name=name; g.enabled=en; } else { cfg.groups.push({id, name, enabled:en}); }
-  render();
-};
-document.getElementById('btnGroupDel').onclick = ()=>{
-  const id = parseInt(document.getElementById('gId').value||-1,10);
-  if(id<0) return;
-  cfg.groups = (cfg.groups||[]).filter(x=>x.id!==id);
-  render();
-};
-
-// ------- Patterns UI -------
-document.getElementById('btnPatternAdd').onclick = ()=>{
-  const name = document.getElementById('pName').value || ("Pattern"+(cfg.patterns?.length||0));
-  if(!cfg.patterns) cfg.patterns=[];
-  cfg.patterns.push({name, steps:[]});
-  render();
-};
-function delPattern(i){
-  if(!cfg.patterns) return;
-  cfg.patterns.splice(i,1);
-  render();
-}
-function addStep(pidx){
-  const dur = parseInt(prompt("Dauer (ms)", "30")||"0",10);
-  const lvl = parseInt(prompt("Level (0..255)", "255")||"0",10);
-  const fade= !!parseInt(prompt("Fade (0/1)", "0")||"0",10);
-  cfg.patterns[pidx].steps.push({duration_ms:dur, level:lvl, fade});
-  render();
-}
-function editStep(pidx){
-  const sidx = parseInt(prompt("Step-Index", "0")||"0",10);
-  const st = cfg.patterns[pidx].steps?.[sidx]; if(!st){ toast("Step nicht gefunden","error"); return; }
-  const dur = parseInt(prompt("Dauer (ms)", String(st.duration_ms))||"0",10);
-  const lvl = parseInt(prompt("Level (0..255)", String(st.level))||"0",10);
-  const fade= !!parseInt(prompt("Fade (0/1)", st.fade?"1":"0")||"0",10);
-  cfg.patterns[pidx].steps[sidx] = {duration_ms:dur, level:lvl, fade};
-  render();
-}
-
-// ------- Lights UI -------
-function prefillLight(i){
-  const L = (cfg.lights||[])[i]; if(!L) return;
-  document.getElementById('lIdx').value = i;
-  document.getElementById('lPin').value = L.pin;
-  document.getElementById('lCh').value  = L.channel;
-  document.getElementById('lPat').value = L.patternIndex;
-  document.getElementById('lRest').value= L.restOverrideMs;
-  document.getElementById('lGid').value = L.groupId;
-  document.getElementById('lPhase').value=L.phase_ms;
-}
-document.getElementById('btnLightAdd').onclick = ()=>{
-  const idx   = document.getElementById('lIdx').value==="" ? -1 : parseInt(document.getElementById('lIdx').value,10);
-  const pin   = parseInt(document.getElementById('lPin').value||"0",10);
-  const ch    = parseInt(document.getElementById('lCh').value||"0",10);
-  const pidx  = parseInt(document.getElementById('lPat').value||"0",10);
-  const rest  = parseInt(document.getElementById('lRest').value||"-1",10);
-  const gid   = parseInt(document.getElementById('lGid').value||"0",10);
-  const phase = parseInt(document.getElementById('lPhase').value||"0",10);
-  if(!cfg.lights) cfg.lights=[];
-  const L = {pin, channel:ch, patternIndex:pidx, restOverrideMs:rest, groupId:gid, phase_ms:phase};
-  if (idx>=0 && idx<cfg.lights.length) cfg.lights[idx]=L; else cfg.lights.push(L);
-  render();
-};
-document.getElementById('btnLightDel').onclick = ()=>{
-  const idx = parseInt(document.getElementById('lIdx').value||"-1",10);
-  if (idx>=0 && idx<cfg.lights.length) { cfg.lights.splice(idx,1); render(); }
-};
-
-// ------- Apply / Reboot / DHCP -------
-document.getElementById('btnApply').onclick = async ()=>{
-  // WLAN übernehmen
-  cfg.wifi = cfg.wifi || {};
-  cfg.wifi.enabled = document.getElementById('wifiEnabled').checked;
-  cfg.wifi.mode    = document.getElementById('wifiMode').value;
-  cfg.wifi.ap = {
-    ssid: document.getElementById('apSsid').value,
-    password: document.getElementById('apPass').value
-  };
-  cfg.wifi.sta = {
-    ssid: document.getElementById('staSsid').value,
-    password: document.getElementById('staPass').value
-  };
-
-  const r = await fetch('/api/config', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
-  if (r.ok) {
-    toast('Gespeichert. Anwenden…');
-    // Hinweis bei STA
-    if (cfg.wifi.enabled && cfg.wifi.mode==='sta') {
-      alert('Konfiguration angewendet.\nDas Gerät verbindet sich jetzt mit deinem WLAN.\nÖffne danach http://<hostname>.local/ oder die vergebene IP.');
+  async function apiPut(data){
+    const r = await fetch('/api/config', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    if(!r.ok){
+      const t = await r.text().catch(()=> '');
+      alert('Fehler beim Speichern: '+t);
+      return false;
     }
-  } else {
-    toast('Fehler beim Speichern','error');
+    return true;
   }
-};
-document.getElementById('btnReload').onclick = ()=>loadConfig();
-document.getElementById('btnReboot').onclick = ()=>{ fetch('/api/sysinfo'); location.reload(); };
-document.getElementById('btnDhcp').onclick = ()=>{
-  // Kein separater Endpoint—nutze einfach Hinweis:
-  alert('DHCP erneuern kannst du über die serielle CLI mit dem Befehl "dhcp".');
-};
 
-// Init
-loadConfig().catch(()=>toast('Init fehlgeschlagen','error'));
-</script>
+  function renderBadges(){
+    const mode = cfg?.wifi?.mode || 'ap';
+    $('#badgeMode').textContent = 'WLAN: '+(cfg?.wifi?.enabled?'an':'aus')+' / '+mode.toUpperCase();
+    $('#badgeHost').textContent = mode==='sta' ? 'Hostname: '+(location.hostname||'*.local') : 'AP: '+(cfg?.wifi?.ap?.ssid||'Blaulicht-XXXX');
+  }
+
+  function fillWifi(){
+    $('#wifi_enabled').checked = !!cfg.wifi.enabled;
+    $('#wifi_mode').value = cfg.wifi.mode || 'ap';
+    $('#ap_ssid').value = cfg.wifi.ap?.ssid || '';
+    $('#ap_pass').value = cfg.wifi.ap?.password || '';
+    $('#sta_ssid').value = cfg.wifi.sta?.ssid || '';
+    $('#sta_pass').value = cfg.wifi.sta?.password || '';
+  }
+
+  function renderGroups(){
+    const tbody = $('#tblGroups'); tbody.innerHTML='';
+    (cfg.groups||[]).forEach(g=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${g.id}</td>
+        <td><input value="${g.name??''}" data-id="${g.id}" class="edit-g-name"></td>
+        <td><input type="checkbox" ${g.enabled?'checked':''} data-id="${g.id}" class="edit-g-en"></td>
+        <td class="right"><button class="btn danger del-g" data-id="${g.id}">Löschen</button></td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('.edit-g-name').forEach(el=>{
+      el.addEventListener('change', ()=>{
+        const id = +el.dataset.id;
+        const g = cfg.groups.find(x=>x.id===id);
+        g.name = el.value;
+      });
+    });
+    tbody.querySelectorAll('.edit-g-en').forEach(el=>{
+      el.addEventListener('change', ()=>{
+        const id = +el.dataset.id;
+        const g = cfg.groups.find(x=>x.id===id);
+        g.enabled = el.checked;
+      });
+    });
+    tbody.querySelectorAll('.del-g').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = +btn.dataset.id;
+        cfg.groups = cfg.groups.filter(x=>x.id!==id);
+        renderGroups();
+      });
+    });
+  }
+
+  function renderPatterns(){
+    const tbody = $('#tblPat'); tbody.innerHTML='';
+    (cfg.patterns||[]).forEach((p,i)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td><input value="${p.name??''}" data-i="${i}" class="edit-p-name"></td>
+        <td>${p.steps?.length||0}</td>
+        <td class="right">
+          <button class="btn" data-i="${i}" class="sel-p">Öffnen</button>
+          <button class="btn danger del-p" data-i="${i}">Löschen</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('.edit-p-name').forEach(el=>{
+      el.addEventListener('change', ()=>{
+        const i = +el.dataset.i;
+        cfg.patterns[i].name = el.value;
+      });
+    });
+    tbody.querySelectorAll('button').forEach(btn=>{
+      const i = +btn.dataset.i;
+      if(btn.classList.contains('del-p')){
+        btn.onclick = ()=>{ cfg.patterns.splice(i,1); selectedPattern = Math.max(0,Math.min(selectedPattern, cfg.patterns.length-1)); renderPatterns(); renderSteps(); };
+      }else{
+        btn.onclick = ()=>{ selectedPattern = i; renderSteps(); };
+        btn.textContent = 'Öffnen';
+      }
+    });
+    renderSteps();
+  }
+
+  function renderSteps(){
+    const p = cfg.patterns?.[selectedPattern];
+    const tbody = $('#tblSteps'); tbody.innerHTML='';
+    if(!p){ return; }
+    p.steps = p.steps||[];
+    p.steps.forEach((s,idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${idx}</td>
+        <td><input class="st-dur" data-i="${idx}" value="${s.duration_ms}"></td>
+        <td><input class="st-lvl" data-i="${idx}" value="${s.level}"></td>
+        <td>
+          <select class="st-fade" data-i="${idx}">
+            <option value="0"${s.fade? '':' selected'}>hart</option>
+            <option value="1"${s.fade? ' selected':''}>weich</option>
+          </select>
+        </td>
+        <td class="right"><button class="btn danger del-step" data-i="${idx}">Löschen</button></td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('.st-dur').forEach(el=>{
+      el.onchange=()=>{ const i=+el.dataset.i; p.steps[i].duration_ms = parseInt(el.value||0,10); };
+    });
+    tbody.querySelectorAll('.st-lvl').forEach(el=>{
+      el.onchange=()=>{ const i=+el.dataset.i; p.steps[i].level = parseInt(el.value||0,10); };
+    });
+    tbody.querySelectorAll('.st-fade').forEach(el=>{
+      el.onchange=()=>{ const i=+el.dataset.i; p.steps[i].fade = (el.value==='1'); };
+    });
+    tbody.querySelectorAll('.del-step').forEach(btn=>{
+      btn.onclick=()=>{ const i=+btn.dataset.i; p.steps.splice(i,1); renderSteps(); };
+    });
+  }
+
+  function renderLights(){
+    const tbody = $('#tblLights'); tbody.innerHTML='';
+    (cfg.lights||[]).forEach((L,i)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td><input class="l-pin"   data-i="${i}" value="${L.pin}"></td>
+        <td><input class="l-ch"    data-i="${i}" value="${L.channel}"></td>
+        <td><input class="l-pidx"  data-i="${i}" value="${L.patternIndex}"></td>
+        <td><input class="l-rest"  data-i="${i}" value="${L.restOverrideMs}"></td>
+        <td><input class="l-gid"   data-i="${i}" value="${L.groupId}"></td>
+        <td><input class="l-phase" data-i="${i}" value="${L.phase_ms}"></td>
+        <td class="right"><button class="btn danger del-l" data-i="${i}">Löschen</button></td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('[class^="l-"]').forEach(el=>{
+      el.addEventListener('change', ()=>{
+        const i = +el.dataset.i;
+        const L = cfg.lights[i];
+        const v = parseInt(el.value||0,10);
+        if (el.classList.contains('l-pin'))   L.pin=v;
+        if (el.classList.contains('l-ch'))    L.channel=v;
+        if (el.classList.contains('l-pidx'))  L.patternIndex=v;
+        if (el.classList.contains('l-rest'))  L.restOverrideMs=v;
+        if (el.classList.contains('l-gid'))   L.groupId=v;
+        if (el.classList.contains('l-phase')) L.phase_ms=v;
+      });
+    });
+    tbody.querySelectorAll('.del-l').forEach(btn=>{
+      btn.onclick=()=>{ const i=+btn.dataset.i; cfg.lights.splice(i,1); renderLights(); };
+    });
+  }
+
+  function collectAndSaveWifi(){
+    cfg.wifi = cfg.wifi||{};
+    cfg.wifi.enabled = $('#wifi_enabled').checked;
+    cfg.wifi.mode    = $('#wifi_mode').value;
+    cfg.wifi.ap = {
+      ssid: $('#ap_ssid').value,
+      password: $('#ap_pass').value
+    };
+    cfg.wifi.sta = {
+      ssid: $('#sta_ssid').value,
+      password: $('#sta_pass').value
+    };
+    return apiPut(cfg);
+  }
+
+  // Buttons
+  $('#btnReload').onclick = init;
+  $('#btnSaveWifi').onclick = async ()=>{
+    if(await collectAndSaveWifi()){
+      alert('Gespeichert. Das WLAN/der Server wird ggf. neu gestartet.');
+      setTimeout(()=>location.reload(), 500);
+    }
+  };
+
+  $('#btnGroupAdd').onclick = ()=>{
+    const id = parseInt($('#g_id').value||0,10);
+    const name = $('#g_name').value||('Gruppe '+id);
+    cfg.groups.push({id, name, enabled:true});
+    renderGroups();
+  };
+
+  $('#btnPatAdd').onclick = ()=>{
+    const name = $('#pat_name').value || ('Pattern '+(cfg.patterns.length));
+    cfg.patterns.push({name, steps:[]});
+    renderPatterns();
+  };
+
+  $('#btnStepAdd').onclick = ()=>{
+    const p = cfg.patterns[selectedPattern]; if(!p){return;}
+    p.steps.push({
+      duration_ms: parseInt($('#st_dur').value||0,10),
+      level:       parseInt($('#st_lvl').value||0,10),
+      fade:        $('#st_fade').value==='1'
+    });
+    renderSteps();
+  };
+
+  $('#btnLightAdd').onclick = ()=>{
+    cfg.lights.push({
+      pin:          parseInt($('#l_pin').value  ||21,10),
+      channel:      parseInt($('#l_ch').value   ||0,10),
+      patternIndex: parseInt($('#l_pidx').value ||0,10),
+      restOverrideMs: parseInt($('#l_rest').value||-1,10),
+      groupId:      parseInt($('#l_gid').value  ||0,10),
+      phase_ms:     parseInt($('#l_phase').value||0,10)
+    });
+    renderLights();
+  };
+
+  $('#btnReloadPage').onclick = ()=> location.reload();
+
+  async function init(){
+    try{
+      cfg = await apiGet();
+      renderBadges();
+      fillWifi();
+      renderGroups();
+      renderPatterns();
+      renderLights();
+    }catch(e){
+      alert('Konnte Konfiguration nicht laden: '+e.message);
+    }
+  }
+  init();
+  </script>
 </body>
 </html>
