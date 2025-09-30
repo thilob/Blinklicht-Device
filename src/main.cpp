@@ -378,11 +378,19 @@ static bool handleFileRead(String path) {
   return true;
 }
 
-/// -------------------- REST Endpoints (nur aktiv, wenn WLAN an) --------------------
+/// -------------------- REST Helpers --------------------
+static void addCORS() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "GET,PUT,POST,OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+}
 static void sendJSON(const String &json) {
+  addCORS();
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json; charset=utf-8", json);
 }
+
+/// -------------------- REST Endpoints --------------------
 static void handleGetConfig() {
   JsonDocument doc;
   doc["wifi_enabled"] = wifiEnabled;
@@ -417,6 +425,7 @@ static void handleGetConfig() {
   String out; serializeJson(doc, out);
   sendJSON(out);
 }
+
 static void handleSysInfo() {
   JsonDocument doc;
   doc["max_ledc_channels"] = MAX_LEDC_CHANNELS;
@@ -426,15 +435,51 @@ static void handleSysInfo() {
   String out; serializeJson(doc, out);
   sendJSON(out);
 }
+
+// /api/wifi: GET=Status, PUT/POST=setzen, OPTIONS=CORS
+static void handleWifiEndpoint() {
+  if (server.method() == HTTP_OPTIONS) {
+    addCORS();
+    server.send(204); // No Content
+    return;
+  }
+
+  if (server.method() == HTTP_GET) {
+    JsonDocument d; d["enabled"] = wifiEnabled; d["ip"] = WiFi.softAPIP().toString();
+    String out; serializeJson(d, out); sendJSON(out); return;
+  }
+
+  if (server.method() == HTTP_PUT || server.method() == HTTP_POST) {
+    if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
+    JsonDocument d;
+    DeserializationError err = deserializeJson(d, server.arg("plain"));
+    if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
+    bool want = (bool)(d["enabled"] | wifiEnabled);
+    if (want != wifiEnabled) {
+      wifiEnabled = want;
+      saveConfig();
+      if (wifiEnabled) startWiFi(); else stopWiFi();
+    }
+    JsonDocument r; r["enabled"] = wifiEnabled;
+    String out; serializeJson(r, out); sendJSON(out); return;
+  }
+
+  addCORS();
+  server.send(405, "text/plain", "Method Not Allowed");
+}
+
 static void handlePutConfig() {
-  if (!server.hasArg("plain")) { server.send(400, "text/plain", "Missing body"); return; }
+  if (server.method() == HTTP_OPTIONS) { addCORS(); server.send(204); return; }
+
+  if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
-  if (err) { server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
+  if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
 
   if (!doc["patterns"].is<JsonArray>() || !doc["lights"].is<JsonArray>() || !doc["groups"].is<JsonArray>()) {
-    server.send(400,"text/plain","Invalid JSON structure"); return;
+    addCORS(); server.send(400,"text/plain","Invalid JSON structure"); return;
   }
+
   // RAM übernehmen
   patterns.clear(); groups.clear(); lights.clear();
   wifiEnabled = (bool)(doc["wifi_enabled"] | wifiEnabled);
@@ -470,6 +515,7 @@ static void handlePutConfig() {
 
   applyHardware();
   bool ok = saveConfig();
+  addCORS();
   server.send(ok?200:500, "text/plain", ok?"OK (saved)":"ERROR (save failed)");
 }
 
@@ -484,27 +530,28 @@ static void startServerRoutes() {
     if (!handleFileRead("/favicon.ico")) server.send(204); // kein Inhalt -> kein Fehler-Log
   });
 
-  // API Endpoints (vorher fehlten bei dir /api/state und /api/wifi)
+  // API Endpoints
   server.on("/api/config",  HTTP_GET, handleGetConfig);
   server.on("/api/config",  HTTP_PUT, handlePutConfig);
   server.on("/api/sysinfo", HTTP_GET, handleSysInfo);
-
-  // Stubs, damit Frontend-/Tools-Anfragen nicht ins Leere laufen:
-  server.on("/api/state", HTTP_GET, [](){
-    JsonDocument d; d["ok"] = true; d["uptime_ms"]=millis();
-    String out; serializeJson(d, out); sendJSON(out);
-  });
-  server.on("/api/wifi", HTTP_GET, [](){
-    JsonDocument d; d["enabled"] = wifiEnabled;
-    String out; serializeJson(d, out); sendJSON(out);
-  });
+  server.on("/api/wifi",    HTTP_ANY, handleWifiEndpoint); // <-- robust gegen GET/PUT/POST/OPTIONS
 
   server.onNotFound([](){
     String path = server.uri();
+    // Für /api/... kein FS-Fallback -> klares 404-JSON
+    if (path.startsWith("/api/")) {
+      JsonDocument d; d["ok"]=false; d["error"]="API route not found"; d["path"]=path;
+      String out; serializeJson(d, out);
+      addCORS();
+      server.send(404, "application/json; charset=utf-8", out);
+      return;
+    }
+    // Static files
     if (handleFileRead(path)) return;
     server.send(404, "text/plain", "Not found");
   });
 }
+
 static void startWiFi() {
   if (serverRunning) return;
   WiFi.mode(WIFI_AP);
