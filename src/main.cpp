@@ -9,15 +9,21 @@
 #include <esp_bt.h>
 
 /* =========================================================================
-   Blaulicht-Controller (ESP32)
-   - 8 Ausgänge, PWM (LEDC) 5 kHz / 8-bit, nicht-blockierend
-   - Mehrere Patterns (letzter Step = Ruhepause), CRUD via Web-UI (AP/STA) ODER CLI
-   - Lights: pin, channel, patternIndex, restOverrideMs, groupId, phase_ms
-   - Gruppen an/aus (freeze der Zeit), Phasenverschiebung pro Ausgang
-   - WLAN: AP/STA, DHCP in STA (Fallback statisch), mDNS (.local), Captive-Portal im AP
-   - Persistenz: /config.json (LittleFS)  +  WLAN-Hauptschalter wifi_enabled
-   - JsonDocument-API (ArduinoJson v7)
+   Blaulicht-Controller (ESP32) – mit Hardware-Factory-Reset (Soft)
+   - 8 PWM-Ausgänge (LEDC) 5 kHz / 8-bit, nicht-blockierend
+   - Mehrere Patterns (letzter Step = Ruhepause), Gruppen, Phasenverschiebung
+   - Web-UI (AP/STA), Captive Portal im AP, mDNS im STA
+   - STA: DHCP mit statischem Fallback
+   - Persistenz: /config.json (LittleFS)
+   - CLI inkl. Echo, Backspace, 'wifi dhcp'
+   - Factory-Reset per Long-Press auf GPIO32 (5 s): löscht nur /config.json, KEIN Format
    ========================================================================= */
+
+// -------------------- Hardware Factory-Reset Button --------------------
+#define FACTORY_BTN_PIN        32    // Freier GPIO; Taster nach GND
+#define FACTORY_HOLD_MS        5000  // 5 s -> /config.json löschen + Neustart
+static uint32_t g_btnPressStart = 0;
+static bool     g_btnWasDown    = false;
 
 // -------------------- Globale WLAN-/Netz-Config --------------------
 static WebServer server(80);
@@ -92,27 +98,12 @@ static void refreshDeviceNameFromApSsid() {
 }
 
 // -------------------- Datenmodelle --------------------
-struct LEDStep {
-  uint16_t duration_ms;   // Länge des Schritts
-  uint8_t  level;         // Zielhelligkeit (0..255)
-  bool     fade;          // weicher Übergang über die Dauer
-};
-struct Pattern {
-  String               name;
-  std::vector<LEDStep> steps;  // letzter Step = Ruhepause
-};
-struct GroupCfg {
-  int     id;
-  String  name;
-  bool    enabled;
-};
+struct LEDStep { uint16_t duration_ms; uint8_t level; bool fade; };
+struct Pattern { String name; std::vector<LEDStep> steps; };
+struct GroupCfg { int id; String name; bool enabled; };
 struct LightCfg {
-  uint8_t pin;
-  uint8_t channel;        // 0..15
-  uint8_t patternIndex;   // Index in patterns[]
-  int     restOverrideMs; // -1 => Pattern-Pause nutzen; sonst Dauer für letzten Step
-  int     groupId;
-  int     phase_ms;       // Phasenverschiebung relativ zum Pattern-Zyklus (>=0)
+  uint8_t pin; uint8_t channel; uint8_t patternIndex;
+  int restOverrideMs; int groupId; int phase_ms;
 };
 
 std::vector<Pattern>  patterns;
@@ -130,9 +121,7 @@ public:
   PatternPlayer() = default;
   void attach(uint8_t ledcChannel) { ch = ledcChannel; }
   void bind(int lightIndex) { boundLightIndex = lightIndex; }
-  void begin() {
-    prev = 0; idx = 0; started = millis(); lastDt = 0; initialized = false;
-  }
+  void begin() { prev = 0; idx = 0; started = millis(); lastDt = 0; initialized = false; }
   void update() {
     if (!isValidBinding()) return;
     const LightCfg &L = lights[boundLightIndex];
@@ -150,71 +139,45 @@ public:
     const LEDStep &s = P.steps[idx];
     const uint16_t dur = effectiveDuration(L, P, idx, s.duration_ms);
     lastDt = millis() - started;
-    if (lastDt >= dur) {
-      writeLevel(target);
-      nextStep(L, P);
-      return;
-    }
+    if (lastDt >= dur) { writeLevel(target); nextStep(L, P); return; }
     const float t = dur > 0 ? (float)lastDt / (float)dur : 1.0f;
-    uint8_t cur = s.fade
-      ? (uint8_t)roundf(prev + (float)((int)target - (int)prev) * t)
-      : target;
+    uint8_t cur = s.fade ? (uint8_t)roundf(prev + (float)((int)target - (int)prev) * t) : target;
     writeLevel(cur);
   }
-
 private:
-  uint8_t ch = 0;
-  int     boundLightIndex = -1;
-  bool     initialized = false;
-  size_t   idx = 0;
-  uint32_t started = 0;
-  uint32_t lastDt  = 0;
-  uint8_t  prev = 0;
-  uint8_t  target = 0;
-
+  uint8_t ch = 0; int boundLightIndex = -1;
+  bool initialized = false; size_t idx = 0; uint32_t started = 0; uint32_t lastDt = 0;
+  uint8_t prev = 0; uint8_t target = 0;
   inline void writeLevel(uint8_t lvl) { ledcWrite(ch, applyGamma(lvl)); }
   bool isValidBinding() const { return boundLightIndex >= 0 && (size_t)boundLightIndex < lights.size(); }
-  static size_t restIndexOf(const Pattern &P) { return P.steps.empty() ? 0 : (P.steps.size() - 1); }
-  static uint16_t effectiveDuration(const LightCfg &L, const Pattern &P, size_t i, uint16_t nominal) {
-    if (i == restIndexOf(P) && L.restOverrideMs >= 0) return (uint16_t)L.restOverrideMs;
-    return nominal;
+  static size_t restIndexOf(const Pattern &P){ return P.steps.empty()?0:(P.steps.size()-1); }
+  static uint16_t effectiveDuration(const LightCfg &L,const Pattern &P,size_t i,uint16_t nominal){
+    if (i==restIndexOf(P) && L.restOverrideMs>=0) return (uint16_t)L.restOverrideMs; return nominal;
   }
-  static uint32_t patternTotalMs(const LightCfg &L, const Pattern &P) {
-    uint32_t total = 0;
-    for (size_t i = 0; i < P.steps.size(); ++i)
-      total += effectiveDuration(L, P, i, P.steps[i].duration_ms);
-    return total;
+  static uint32_t patternTotalMs(const LightCfg &L,const Pattern &P){
+    uint32_t total=0; for(size_t i=0;i<P.steps.size();++i) total+=effectiveDuration(L,P,i,P.steps[i].duration_ms); return total;
   }
-  void initWithPhase(const LightCfg &L, const Pattern &P) {
-    uint32_t total = patternTotalMs(L, P);
-    uint32_t phase = (L.phase_ms >= 0 && total > 0) ? (uint32_t)L.phase_ms % total : 0;
-    size_t step = 0; uint32_t acc = 0;
-    while (step < P.steps.size()) {
-      uint16_t dur = effectiveDuration(L, P, step, P.steps[step].duration_ms);
-      if (phase < acc + dur) break;
-      acc += dur; ++step;
+  void initWithPhase(const LightCfg &L,const Pattern &P){
+    uint32_t total=patternTotalMs(L,P);
+    uint32_t phase=(L.phase_ms>=0 && total>0)?(uint32_t)L.phase_ms%total:0;
+    size_t step=0; uint32_t acc=0;
+    while(step<P.steps.size()){
+      uint16_t d=effectiveDuration(L,P,step,P.steps[step].duration_ms);
+      if(phase<acc+d) break; acc+=d; ++step;
     }
-    if (step >= P.steps.size()) step = 0;
-    idx = step;
-    const LEDStep &s = P.steps[idx];
-    prev = endLevelOfStep(P, idx == 0 ? P.steps.size()-1 : idx-1);
-    target = s.level;
-    if (!s.fade) writeLevel(target);
+    if(step>=P.steps.size()) step=0;
+    idx=step;
+    const LEDStep &s=P.steps[idx];
+    prev=endLevelOfStep(P, idx==0?P.steps.size()-1:idx-1);
+    target=s.level;
+    if(!s.fade) writeLevel(target);
     started = millis() - (phase - acc);
     lastDt  = (phase - acc);
   }
-  static uint8_t endLevelOfStep(const Pattern &P, size_t i) {
-    if (i >= P.steps.size()) return 0;
-    return P.steps[i].level;
-  }
-  void nextStep(const LightCfg &L, const Pattern &P) {
-    prev = target;
-    idx = (idx + 1) % P.steps.size();
-    const LEDStep &s = P.steps[idx];
-    target = s.level;
-    if (!s.fade) writeLevel(target);
-    started = millis();
-    lastDt = 0;
+  static uint8_t endLevelOfStep(const Pattern &P,size_t i){ if(i>=P.steps.size()) return 0; return P.steps[i].level; }
+  void nextStep(const LightCfg &L,const Pattern &P){
+    prev=target; idx=(idx+1)%P.steps.size(); const LEDStep &s=P.steps[idx]; target=s.level;
+    if(!s.fade) writeLevel(target); started=millis(); lastDt=0;
   }
 };
 static PatternPlayer players[8];
@@ -235,7 +198,6 @@ static bool saveConfig() {
   doc["wifi"]["sta"]["last_gw"]   = staLastGW.toString();
   doc["wifi"]["sta"]["last_mask"] = staLastMask.toString();
 
-  // patterns
   JsonArray jPatterns = doc["patterns"].to<JsonArray>();
   for (const auto &p : patterns) {
     JsonObject jp = jPatterns.add<JsonObject>();
@@ -248,13 +210,11 @@ static bool saveConfig() {
       js["fade"]        = st.fade;
     }
   }
-  // groups
   JsonArray jGroups = doc["groups"].to<JsonArray>();
   for (const auto &g : groups) {
     JsonObject jg = jGroups.add<JsonObject>();
     jg["id"] = g.id; jg["name"] = g.name; jg["enabled"] = g.enabled;
   }
-  // lights
   JsonArray jLights = doc["lights"].to<JsonArray>();
   for (const auto &L : lights) {
     JsonObject jl = jLights.add<JsonObject>();
@@ -271,9 +231,7 @@ static bool saveConfig() {
   return n > 0;
 }
 
-static bool parseIP(const String& s, IPAddress& out) {
-  return out.fromString(s);
-}
+static bool parseIP(const String& s, IPAddress& out) { return out.fromString(s); }
 
 static bool loadConfig() {
   if (!LittleFS.exists("/config.json")) return false;
@@ -292,16 +250,14 @@ static bool loadConfig() {
   staSsidCfg  = (doc["wifi"]["sta"]["ssid"] | "");
   staPassCfg  = (doc["wifi"]["sta"]["password"] | "");
 
-  // Letzte STA-IP-Werte
   IPAddress tmp;
-  if (doc["wifi"]["sta"]["last_ip"].is<const char*>() && parseIP(doc["wifi"]["sta"]["last_ip"].as<const char*>(), tmp)) staLastIP = tmp;
-  if (doc["wifi"]["sta"]["last_gw"].is<const char*>() && parseIP(doc["wifi"]["sta"]["last_gw"].as<const char*>(), tmp)) staLastGW = tmp;
+  if (doc["wifi"]["sta"]["last_ip"].is<const char*>()   && parseIP(doc["wifi"]["sta"]["last_ip"].as<const char*>(),   tmp)) staLastIP   = tmp;
+  if (doc["wifi"]["sta"]["last_gw"].is<const char*>()   && parseIP(doc["wifi"]["sta"]["last_gw"].as<const char*>(),   tmp)) staLastGW   = tmp;
   if (doc["wifi"]["sta"]["last_mask"].is<const char*>() && parseIP(doc["wifi"]["sta"]["last_mask"].as<const char*>(), tmp)) staLastMask = tmp;
 
   // Alt/leer -> eindeutige SSID erzeugen
   if (apSsidCfg.length() == 0 || apSsidCfg == AP_SSID_DEFAULT) {
-    apSsidCfg = makeDefaultApSsid();
-    saveConfig();
+    apSsidCfg = makeDefaultApSsid(); saveConfig();
   }
   refreshDeviceNameFromApSsid();
 
@@ -318,7 +274,6 @@ static bool loadConfig() {
     }
     patterns.push_back(std::move(p));
   }
-
   for (JsonObject jg : doc["groups"].as<JsonArray>()) {
     GroupCfg g;
     g.id      = (int)(jg["id"]      | 0);
@@ -326,7 +281,6 @@ static bool loadConfig() {
     g.enabled = (bool)(jg["enabled"] | true);
     groups.push_back(std::move(g));
   }
-
   for (JsonObject jl : doc["lights"].as<JsonArray>()) {
     LightCfg L;
     L.pin            = (uint8_t)(jl["pin"]            | 255);
@@ -341,12 +295,9 @@ static bool loadConfig() {
 }
 
 static void makeDefaultConfig() {
-  wifiEnabled = true;
-  wifiModeCfg = "ap";
-  apSsidCfg   = makeDefaultApSsid();
-  apPassCfg   = AP_PASS_DEFAULT;
-  staSsidCfg  = "";
-  staPassCfg  = "";
+  wifiEnabled = true; wifiModeCfg = "ap";
+  apSsidCfg   = makeDefaultApSsid(); apPassCfg = AP_PASS_DEFAULT;
+  staSsidCfg  = ""; staPassCfg  = "";
   refreshDeviceNameFromApSsid();
 
   patterns.clear(); groups.clear(); lights.clear();
@@ -425,14 +376,11 @@ static bool handleFileRead(String path) {
 // -------------------- Captive-Portal (AP) --------------------
 static bool isAPModeActive() { return wifiEnabled && wifiModeCfg == "ap"; }
 
-// Redirecte alle fremden Hostnamen im AP auf unsere Portal-IP
 static bool handleCaptivePortalRedirect() {
   if (!isAPModeActive()) return false;
   String host = server.hostHeader();
   if (!host.length()) return false;
-
   String apIpStr = AP_IP.toString();
-  // Wenn der Hostname NICHT unsere AP-IP ist -> Redirect
   if (host != apIpStr) {
     String url = "http://" + apIpStr + "/";
     server.sendHeader("Location", url, true);
@@ -442,7 +390,6 @@ static bool handleCaptivePortalRedirect() {
   return false;
 }
 
-// Bekannte Captive-Check URLs (Apple/Android/Windows)
 static void registerCaptiveHelpers() {
   server.on("/hotspot-detect.html", HTTP_GET, [](){ // Apple
     if (handleCaptivePortalRedirect()) return;
@@ -528,11 +475,10 @@ static bool waitForStaConnect(uint32_t timeoutMs) {
   return false;
 }
 
-static void startServerRoutes(); // Vorwärtsdeklaration
-static void stopWiFi();          // Vorwärtsdeklaration
-static void startWiFi();         // Vorwärtsdeklaration
+static void startServerRoutes(); // Vorwärts
+static void stopWiFi();          // Vorwärts
+static void startWiFi();         // Vorwärts
 
-// /api/wifi: GET -> Status; PUT -> Einstellungen setzen (inkl. Mode/SSID/PW), optional Neustart
 static void handleWifiEndpoint() {
   if (server.method() == HTTP_GET) {
     JsonDocument d;
@@ -567,18 +513,13 @@ static void handleWifiEndpoint() {
     if (d["sta"]["ssid"].is<const char*>())     staSsidCfg = d["sta"]["ssid"].as<const char*>();
     if (d["sta"]["password"].is<const char*>()) staPassCfg = d["sta"]["password"].as<const char*>();
 
-    // AP-SSID leer/legacy -> eindeutige setzen
     if (apSsidCfg.length()==0 || apSsidCfg==AP_SSID_DEFAULT) apSsidCfg = makeDefaultApSsid();
     refreshDeviceNameFromApSsid();
 
     bool ok = saveConfig();
     if (!ok) { server.send(500, "text/plain", "save failed"); return; }
 
-    // Optionaler Sofortwechsel
-    if (d["apply_now"].is<bool>() && (bool)d["apply_now"]) {
-      stopWiFi();
-      startWiFi();
-    }
+    if (d["apply_now"].is<bool>() && (bool)d["apply_now"]) { stopWiFi(); startWiFi(); }
 
     server.send(200, "text/plain", "OK");
     return;
@@ -596,7 +537,6 @@ static void handlePutConfig() {
   if (!doc["patterns"].is<JsonArray>() || !doc["lights"].is<JsonArray>() || !doc["groups"].is<JsonArray>()) {
     server.send(400,"text/plain","Invalid JSON structure"); return;
   }
-  // RAM übernehmen
   patterns.clear(); groups.clear(); lights.clear();
 
   for (JsonObject jp : doc["patterns"].as<JsonArray>()) {
@@ -635,7 +575,6 @@ static void handlePutConfig() {
 
 // -------------------- WLAN Start/Stop + Server Start/Stop --------------------
 static void startServerRoutes() {
-  // Captive Portal Helfer (AP)
   registerCaptiveHelpers();
 
   server.on("/", HTTP_GET, [](){
@@ -648,7 +587,6 @@ static void startServerRoutes() {
   server.on("/api/sysinfo", HTTP_GET, handleSysInfo);
   server.on("/api/wifi",    HTTP_ANY, handleWifiEndpoint);
 
-  // Statische Dateien & Captive Redirect
   server.onNotFound([](){
     if (isAPModeActive() && handleCaptivePortalRedirect()) return;
     String path = server.uri();
@@ -658,10 +596,7 @@ static void startServerRoutes() {
 }
 
 static void stopWiFi() {
-  if (serverRunning) {
-    server.stop();
-    serverRunning = false;
-  }
+  if (serverRunning) { server.stop(); serverRunning = false; }
   MDNS.end();
   dnsServer.stop();
   WiFi.softAPdisconnect(true);
@@ -670,20 +605,8 @@ static void stopWiFi() {
   Serial.println("WLAN/Server gestoppt.");
 }
 
-static bool waitDnsReady(uint32_t ms=50) {
-  // kleine Verzögerung, damit DNSServer sauber starten kann
-  delay(ms);
-  return true;
-}
-
-static bool waitApReady(uint32_t ms=100) { delay(ms); return true; }
-
 static void startWiFi() {
-  // Sicherheits-Stopp (idempotent)
-  if (serverRunning) {
-    server.stop();
-    serverRunning = false;
-  }
+  if (serverRunning) { server.stop(); serverRunning = false; }
   MDNS.end();
   dnsServer.stop();
   WiFi.softAPdisconnect(true);
@@ -694,23 +617,20 @@ static void startWiFi() {
   WiFi.setTxPower(WIFI_POWER_5dBm); // moderat reduziert
 
   if (wifiModeCfg == "sta") {
-    Serial.println("WLAN: wechsle in STA-Modus, versuche DHCP…");
+    Serial.println("WLAN: STA-Modus, versuche DHCP…");
     WiFi.mode(WIFI_STA);
 
-    // Hostname aus AP-SSID ableiten
     refreshDeviceNameFromApSsid();
     WiFi.setHostname(deviceName.c_str());
 
-    // DHCP aktivieren und verbinden
-    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // DHCP
     WiFi.begin(staSsidCfg.c_str(), staPassCfg.c_str());
 
-    bool ok = waitForStaConnect(10000); // 10 s Timeout
+    bool ok = waitForStaConnect(10000);
     if (!ok) {
-      Serial.println("DHCP/Connect fehlgeschlagen – versuche statisch mit letzten Werten…");
+      Serial.println("DHCP/Connect fehlgeschlagen – statischer Fallback…");
       if (staLastIP != IPAddress(0,0,0,0) && staLastGW != IPAddress(0,0,0,0) && staLastMask != IPAddress(0,0,0,0)) {
-        WiFi.disconnect();
-        delay(100);
+        WiFi.disconnect(); delay(100);
         WiFi.config(staLastIP, staLastGW, staLastMask);
         WiFi.begin(staSsidCfg.c_str(), staPassCfg.c_str());
         ok = waitForStaConnect(6000);
@@ -718,22 +638,19 @@ static void startWiFi() {
     }
 
     if (ok) {
-      Serial.printf("STA verbunden: IP=%s, GW=%s, MASK=%s, RSSI=%d dBm\n",
+      Serial.printf("STA: IP=%s GW=%s MASK=%s RSSI=%d dBm\n",
         WiFi.localIP().toString().c_str(),
         WiFi.gatewayIP().toString().c_str(),
         WiFi.subnetMask().toString().c_str(),
         WiFi.RSSI());
-
-      // letzte erfolgreichen Werte speichern
       staLastIP   = WiFi.localIP();
       staLastGW   = WiFi.gatewayIP();
       staLastMask = WiFi.subnetMask();
       saveConfig();
 
-      // mDNS aktivieren -> http://<deviceName>.local/
       if (MDNS.begin(deviceName.c_str())) {
         MDNS.addService("http", "tcp", 80);
-        Serial.printf("mDNS aktiv: http://%s.local/\n", deviceName.c_str());
+        Serial.printf("mDNS: http://%s.local/\n", deviceName.c_str());
       } else {
         Serial.println("mDNS Start fehlgeschlagen.");
       }
@@ -746,41 +663,29 @@ static void startWiFi() {
     serverRunning = true;
 
   } else {
-    // AP-Modus
+    // AP
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(AP_IP, AP_GW, AP_MASK);
 
-    // Fallback: leere/legacy SSID -> eindeutige SSID erzeugen + persistieren
     String ssid = apSsidCfg.length() ? apSsidCfg : makeDefaultApSsid();
     if (apSsidCfg != ssid) { apSsidCfg = ssid; saveConfig(); }
     refreshDeviceNameFromApSsid();
 
-    String pass = apPassCfg; // darf leer sein (offener AP)
+    String pass = apPassCfg;
     bool apok = false;
-    if (pass.length() == 0) {
-      apok = WiFi.softAP(ssid.c_str()); // offener AP
-    } else if (pass.length() >= 8) {
-      apok = WiFi.softAP(ssid.c_str(), pass.c_str()); // WPA2
-    } else {
-      Serial.println("Warnung: Passwort < 8 Zeichen -> starte offenen AP.");
-      apok = WiFi.softAP(ssid.c_str());
-    }
+    if (pass.length() == 0) apok = WiFi.softAP(ssid.c_str()); // offen
+    else if (pass.length() >= 8) apok = WiFi.softAP(ssid.c_str(), pass.c_str()); // WPA2
+    else { Serial.println("Warnung: Passwort < 8 Zeichen -> offener AP."); apok = WiFi.softAP(ssid.c_str()); }
 
-    waitApReady();
-
-    // DNS-Captive: alle Domains auf AP-IP umbiegen
+    // DNS-Captive
     dnsServer.setTTL(60);
     dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
     dnsServer.start(53, "*", AP_IP);
-    waitDnsReady();
 
     Serial.printf("AP gestartet: SSID='%s' (%s), ok=%d\n",
                   ssid.c_str(), WiFi.softAPIP().toString().c_str(), apok);
 
-    // Optional mDNS auch im AP (nicht jedes OS nutzt das im AP, schadet aber nicht)
-    if (MDNS.begin(deviceName.c_str())) {
-      MDNS.addService("http", "tcp", 80);
-    }
+    if (MDNS.begin(deviceName.c_str())) { MDNS.addService("http", "tcp", 80); }
 
     startServerRoutes();
     server.begin();
@@ -791,10 +696,7 @@ static void startWiFi() {
 // -------------------- CLI (Serielle Konsole) --------------------
 static String cliLine;
 
-static void cliPrintPrompt() {
-  Serial.print("\r\n> ");
-  Serial.flush();
-}
+static void cliPrintPrompt() { Serial.print("\r\n> "); Serial.flush(); }
 static long asLong(const String& s, long def=0){ char* e=nullptr; long v=strtol(s.c_str(), &e, 10); return e && *e==0 ? v : def; }
 
 static void cliStatus() {
@@ -806,14 +708,8 @@ static void cliStatus() {
                 (unsigned)patterns.size(), (unsigned)groups.size(), (unsigned)lights.size());
 }
 
-static void cliGroupList() {
-  for (auto &g: groups) Serial.printf("id=%d name='%s' enabled=%d\n", g.id, g.name.c_str(), g.enabled);
-}
-static void cliPatList() {
-  for (size_t i=0;i<patterns.size();++i) {
-    Serial.printf("[%u] '%s' steps=%u\n", (unsigned)i, patterns[i].name.c_str(), (unsigned)patterns[i].steps.size());
-  }
-}
+static void cliGroupList() { for (auto &g: groups) Serial.printf("id=%d name='%s' enabled=%d\n", g.id, g.name.c_str(), g.enabled); }
+static void cliPatList()   { for (size_t i=0;i<patterns.size();++i) Serial.printf("[%u] '%s' steps=%u\n",(unsigned)i,patterns[i].name.c_str(),(unsigned)patterns[i].steps.size()); }
 static void cliLightList() {
   for (size_t i=0;i<lights.size();++i) {
     auto &L = lights[i];
@@ -830,8 +726,7 @@ static bool cliWifiDhcp(uint32_t timeoutMs = 10000) {
   Serial.printf("DHCP: versuche neue Lease im STA-Modus (SSID='%s')...\n", staSsidCfg.c_str());
   WiFi.mode(WIFI_STA);
   WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
-  WiFi.disconnect();
-  delay(100);
+  WiFi.disconnect(); delay(100);
   WiFi.begin(staSsidCfg.c_str(), staPassCfg.c_str());
 
   bool ok = waitForStaConnect(timeoutMs);
@@ -891,9 +786,8 @@ static void cliApplyAndMaybeStartWifi() {
 }
 
 static void handleCliLine(const String& line) {
-  // Tokenize
-  std::vector<String> t; String cur; 
-  for (size_t i=0;i<line.length();++i){ char c=line[i]; if (c==' '||c=='\t'){ if(cur.length()) {t.push_back(cur); cur="";} } else cur+=c; }
+  std::vector<String> t; String cur;
+  for (size_t i=0;i<line.length();++i){ char c=line[i]; if (c==' '||c=='\t'){ if(cur.length()){t.push_back(cur); cur="";} } else cur+=c; }
   if(cur.length()) t.push_back(cur);
   if (t.empty()) return;
   String cmd = t[0]; cmd.toLowerCase();
@@ -904,17 +798,14 @@ static void handleCliLine(const String& line) {
   if (cmd=="load") { bool ok=loadConfig(); Serial.println(ok?"OK loaded":"ERR load"); cliApplyAndMaybeStartWifi(); return; }
   if (cmd=="reboot") { Serial.println("Rebooting..."); delay(100); ESP.restart(); }
 
-  // wifi commands
   if (cmd=="wifi") {
     if (t.size()>=2) {
-      String sub = t[1]; sub.toLowerCase();
-
+      String sub=t[1]; sub.toLowerCase();
       if (sub=="on")  { wifiEnabled=true; saveConfig(); startWiFi(); Serial.println("WiFi ON."); return; }
       if (sub=="off") { wifiEnabled=false; saveConfig(); stopWiFi(); Serial.println("WiFi OFF."); return; }
-
       if (sub=="mode" && t.size()>=3) {
-        String m = t[2]; m.toLowerCase();
-        if (m=="ap" || m=="sta") { wifiModeCfg=m; saveConfig(); stopWiFi(); startWiFi(); Serial.println("Mode updated."); }
+        String m=t[2]; m.toLowerCase();
+        if (m=="ap"||m=="sta") { wifiModeCfg=m; saveConfig(); stopWiFi(); startWiFi(); Serial.println("Mode updated."); }
         else Serial.println("Usage: wifi mode ap|sta");
         return;
       }
@@ -934,18 +825,14 @@ static void handleCliLine(const String& line) {
         return;
       }
       if (sub=="dhcp") {
-        uint32_t timeoutMs = 10000;
-        if (t.size()>=3) timeoutMs = (uint32_t)asLong(t[2], 10000);
-        bool ok = cliWifiDhcp(timeoutMs);
-        Serial.println(ok ? "DHCP: OK" : "DHCP: FEHLER");
-        return;
+        uint32_t timeoutMs = 10000; if (t.size()>=3) timeoutMs = (uint32_t)asLong(t[2],10000);
+        bool ok = cliWifiDhcp(timeoutMs); Serial.println(ok?"DHCP: OK":"DHCP: FEHLER"); return;
       }
     }
     Serial.println("wifi on|off | wifi mode ap|sta | wifi set ap <ssid> <pass> | wifi set sta <ssid> <pass> | wifi dhcp [ms]");
     return;
   }
 
-  // group commands
   if (cmd=="group" && t.size()>=2) {
     String sub=t[1]; sub.toLowerCase();
     if (sub=="list") { cliGroupList(); return; }
@@ -970,7 +857,6 @@ static void handleCliLine(const String& line) {
     }
   }
 
-  // pattern commands
   if (cmd=="pat" && t.size()>=2) {
     String sub=t[1]; sub.toLowerCase();
     if (sub=="list") { cliPatList(); return; }
@@ -1001,7 +887,6 @@ static void handleCliLine(const String& line) {
     }
   }
 
-  // light commands
   if (cmd=="light" && t.size()>=2) {
     String sub=t[1]; sub.toLowerCase();
     if (sub=="list") { cliLightList(); return; }
@@ -1036,8 +921,6 @@ static void handleCliLine(const String& line) {
 static void cliPoll() {
   while (Serial.available()) {
     char c = (char)Serial.read();
-
-    // Normalize Zeilenende (CR oder LF)
     if (c == '\r' || c == '\n') {
       Serial.print("\r\n");
       String line = cliLine; cliLine = "";
@@ -1046,20 +929,37 @@ static void cliPoll() {
       cliPrintPrompt();
       continue;
     }
-
-    // Backspace (BS=8, DEL=127)
-    if (c == 8 || c == 127) {
-      if (cliLine.length() > 0) {
-        cliLine.remove(cliLine.length() - 1);
-        Serial.print("\b \b");
-      }
+    if (c == 8 || c == 127) { // Backspace
+      if (cliLine.length() > 0) { cliLine.remove(cliLine.length()-1); Serial.print("\b \b"); }
       continue;
     }
+    if (c >= 32 && c <= 126) { cliLine += c; Serial.write(c); }
+  }
+}
 
-    // Druckbare ASCII-Zeichen
-    if (c >= 32 && c <= 126) {
-      cliLine += c;
-      Serial.write(c); // Echo
+// -------------------- Factory-Reset Poll --------------------
+static void factoryResetPoll() {
+  int level = digitalRead(FACTORY_BTN_PIN); // HIGH=idle, LOW=pressed (Pullup)
+  uint32_t now = millis();
+
+  if (level == LOW) {
+    if (!g_btnWasDown) {
+      g_btnWasDown = true; g_btnPressStart = now;
+      Serial.println("\nFactory-Reset: Taste gedrückt. Halten für 5 s zum Zurücksetzen…");
+    } else {
+      uint32_t held = now - g_btnPressStart;
+      if (held >= FACTORY_HOLD_MS) {
+        Serial.println("Factory-Reset: /config.json wird gelöscht und Gerät neu gestartet…");
+        LittleFS.remove("/config.json");
+        delay(200);
+        ESP.restart();
+      }
+    }
+  } else {
+    if (g_btnWasDown) {
+      uint32_t held = now - g_btnPressStart;
+      Serial.printf("Factory-Reset: Taste losgelassen (gehalten: %lu ms)\n", (unsigned long)held);
+      g_btnWasDown = false;
     }
   }
 }
@@ -1073,26 +973,25 @@ void setup() {
   setCpuFrequencyMhz(80);   // weniger Spitzenlast
   btStop();                 // Bluetooth aus
 
-  Serial.println("\nBlaulicht-Controller (Web/CLI + LittleFS + Captive Portal)");
+  pinMode(FACTORY_BTN_PIN, INPUT_PULLUP); // Taster nach GND
+
+  Serial.println("\nBlaulicht-Controller (Web/CLI + LittleFS + Captive Portal) – Soft Factory-Reset (GPIO32)");
   Serial.printf("LEDC-Kanaele gesamt: %u\n", MAX_LEDC_CHANNELS);
 
   if (!LittleFS.begin(true)) Serial.println("LittleFS init fehlgeschlagen.");
 
   if (!loadConfig()) {
     Serial.println("Keine config.json gefunden – erstelle Default.");
-    makeDefaultConfig();
-    saveConfig();
+    makeDefaultConfig(); saveConfig();
   }
 
   applyHardware();
 
   if (wifiEnabled) startWiFi();
-  else {
-    WiFi.mode(WIFI_OFF);
-    Serial.println("WLAN ist laut config.json deaktiviert (wifi_enabled=false).");
-  }
+  else { WiFi.mode(WIFI_OFF); Serial.println("WLAN ist laut config.json deaktiviert (wifi_enabled=false)."); }
 
   Serial.println("\nCLI bereit. 'help' eingeben.");
+  Serial.println("Hinweis: Halte den Taster an GPIO32 für 5 s, um /config.json zu löschen (Werkszustand).");
   cliPrintPrompt();
 }
 
@@ -1106,4 +1005,5 @@ void loop() {
   for (size_t i = 0; i < n; ++i) players[i].update();
 
   cliPoll();
+  factoryResetPoll();
 }
