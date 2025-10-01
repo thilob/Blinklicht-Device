@@ -36,7 +36,7 @@
     .list .head,.list .item{display:grid;grid-template-columns:48px 1fr auto;gap:8px;padding:10px 12px;align-items:center}
     .list .head{background:#12151a;color:var(--muted);font-size:12px}
     .list .item{border-top:1px solid #202736}
-    .pill{font-size:12px;border:1px solid #2a3342;border-radius:999px;padding:4px 8px;color:#c5d3e8}
+    .pill{font-size:12px;border:1px solid #2a3342;border-radius:999px;padding:4px 8px;color:#c5d3e8;text-align:center}
     .muted{color:var(--muted)}
     .hr{height:1px;background:#202736;margin:14px 0}
     .note{font-size:12px;color:var(--muted)}
@@ -47,14 +47,14 @@
     .toast.err{border-color:var(--err)}
     code{background:#0b0e12;border:1px solid #1a2130;border-radius:8px;padding:0 6px}
 
-    /* Mini-Tabellen (für Steps / Groups / Lights Spaltenüberschriften) */
+    /* Mini-Tabellen (für Steps / Groups / Lights) */
     .tbl{width:100%;border:1px solid #232a35;border-radius:10px;overflow:hidden;margin-top:8px}
     .tbl-row,.tbl-head{display:grid;gap:8px;align-items:center}
     .tbl-head{background:#12151a;color:var(--muted);font-size:12px}
     .tbl-row{border-top:1px solid #202736}
     .tbl-cell{padding:8px 10px}
     .tbl-head .tbl-cell{padding:10px 10px}
-    .tbl-steps{grid-template-columns: 140px 160px 140px 60px}
+    .tbl-steps{grid-template-columns: 140px 160px 140px 80px}
     .tbl-groups{grid-template-columns: 1fr 160px 100px}
     .tbl-lights{grid-template-columns: 90px 100px minmax(160px,1fr) 150px 110px 110px 80px}
     .tbl input,.tbl select{width:100%}
@@ -255,7 +255,7 @@
           <li><b>GPIO</b>: Pin-Nummer am ESP32.</li>
           <li><b>LEDC ch</b>: PWM-Kanal (0–15); jeder Ausgang braucht einen eigenen Kanal.</li>
           <li><b>Pattern</b>: Verknüpftes Blinkmuster.</li>
-          <li><b>Rest ms (-1=Pat)</b>: Dauer des letzten Schritt (Pause). <code>-1</code> = Pause aus Pattern übernehmen.</li>
+          <li><b>Rest ms (-1=Pat)</b>: Dauer des letzten Schritts (Pause). <code>-1</code> = Pause aus Pattern übernehmen.</li>
           <li><b>Gruppe</b>: Gruppennummer; Gruppen können komplett an/aus geschaltet werden.</li>
           <li><b>Phase ms</b>: Zeitverschiebung innerhalb eines Pattern-Zyklus (für versetztes Blinken).</li>
           <li><b>Aktion</b>: Ausgang löschen.</li>
@@ -275,6 +275,7 @@
       if (txt !== undefined) n.textContent = txt;
       return n;
     };
+    const cell = (child) => { const c = el("div","tbl-cell"); c.appendChild(child); return c; };
     const toast = (msg, kind="") => {
       const t = $("#toast");
       t.className = "toast" + (kind?(" "+kind):"");
@@ -319,7 +320,7 @@
       const r = await fetch("/api/config");
       if (!r.ok){ toast("Konnte /api/config nicht laden","err"); return; }
       const cfg = await r.json();
-      // Merge defensively
+
       state.patterns = cfg.patterns || [];
       state.groups   = cfg.groups   || [];
       state.lights   = cfg.lights   || [];
@@ -371,61 +372,61 @@
       box.querySelectorAll(".item").forEach(n=>n.remove());
 
       state.patterns.forEach((p, idx)=>{
+        p.steps = Array.isArray(p.steps) ? p.steps : [];
         const it = el("div","item");
         it.appendChild(el("div","pill", idx));
 
         const body = el("div");
 
-          const name = el("input"); name.value = p.name||""; name.placeholder = "Pattern-Name";
-          name.addEventListener("input", ()=> p.name = name.value);
-          body.appendChild(name);
+        const name = el("input"); name.value = p.name||""; name.placeholder = "Pattern-Name";
+        name.addEventListener("input", ()=> p.name = name.value);
+        body.appendChild(name);
 
-          // Steps "Tabelle" mit Spaltenüberschriften
-          const table = el("div","tbl");
-          const head  = el("div","tbl-head tbl-steps");
-          head.append(
-            Object.assign(el("div","tbl-cell"),{textContent:"Dauer (ms)"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Level (0–255)"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Fade"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Aktion"})
-          );
-          table.appendChild(head);
+        // Steps „Tabelle“ mit Spaltenüberschriften
+        const table = el("div","tbl");
+        const head  = el("div","tbl-head tbl-steps");
+        head.append(
+          el("div","tbl-cell","Dauer (ms)"),
+          el("div","tbl-cell","Level (0–255)"),
+          el("div","tbl-cell","Fade"),
+          el("div","tbl-cell","Aktion")
+        );
+        table.appendChild(head);
 
-          p.steps = p.steps || [];
-          p.steps.forEach((s, sidx)=>{
-            const row = el("div","tbl-row tbl-steps");
-            const d = el("input"); d.type="number"; d.placeholder="ms"; d.value = s.duration_ms ?? 0;
-            const l = el("input"); l.type="number"; l.placeholder="0..255"; l.min=0;l.max=255; l.value = s.level ?? 0;
-            const f = el("select"); f.innerHTML='<option value="false">false</option><option value="true">true</option>'; f.value=String(!!s.fade);
-            const del = el("button","btn btn-err","✖");
+        p.steps.forEach((s, sidx)=>{
+          const row = el("div","tbl-row tbl-steps");
+          const d = el("input"); d.type="number"; d.placeholder="ms"; d.value = s.duration_ms ?? 0;
+          const l = el("input"); l.type="number"; l.placeholder="0..255"; l.min=0;l.max=255; l.value = s.level ?? 0;
+          const f = el("select"); f.innerHTML='<option value="false">false</option><option value="true">true</option>'; f.value=String(!!s.fade);
+          const delBtn = el("button","btn btn-err","✖");
 
-            d.addEventListener("change", ()=> s.duration_ms = Number(d.value));
-            l.addEventListener("change", ()=> s.level       = Number(l.value));
-            f.addEventListener("change", ()=> s.fade        = (f.value==="true"));
-            del.addEventListener("click", ()=>{
-              p.steps.splice(sidx,1);
-              renderPatterns();
-            });
-
-            row.append(
-              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(d)}),
-              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(l)}),
-              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(f)}),
-              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(del)})
-            );
-            table.appendChild(row);
-          });
-
-          // add step
-          const addRow = el("div","row"); addRow.style.marginTop="8px";
-          const add = el("button","btn btn-acc","＋ Schritt");
-          add.addEventListener("click", ()=>{
-            p.steps.push({duration_ms:100, level:0, fade:false});
+          d.addEventListener("change", ()=> s.duration_ms = Number(d.value));
+          l.addEventListener("change", ()=> s.level       = Number(l.value));
+          f.addEventListener("change", ()=> s.fade        = (f.value==="true"));
+          delBtn.addEventListener("click", ()=>{
+            p.steps.splice(sidx,1);
             renderPatterns();
           });
-          addRow.appendChild(add);
 
-          body.append(table, addRow);
+          row.append(
+            cell(d),
+            cell(l),
+            cell(f),
+            cell(delBtn)
+          );
+          table.appendChild(row);
+        });
+
+        // add step
+        const addRow = el("div","row"); addRow.style.marginTop="8px";
+        const add = el("button","btn btn-acc","＋ Schritt");
+        add.addEventListener("click", ()=>{
+          p.steps.push({duration_ms:100, level:0, fade:false});
+          renderPatterns();
+        });
+        addRow.appendChild(add);
+
+        body.append(table, addRow);
         it.appendChild(body);
 
         const actions = el("div","row");
@@ -450,41 +451,40 @@
 
         const body = el("div");
 
-          // „Tabelle“ mit Spaltentiteln für Gruppen
-          const table = el("div","tbl");
-          const head  = el("div","tbl-head tbl-groups");
-          head.append(
-            Object.assign(el("div","tbl-cell"),{textContent:"Name"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"enabled"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Aktion"})
-          );
-          table.appendChild(head);
+        const table = el("div","tbl");
+        const head  = el("div","tbl-head tbl-groups");
+        head.append(
+          el("div","tbl-cell","Name"),
+          el("div","tbl-cell","enabled"),
+          el("div","tbl-cell","Aktion")
+        );
+        table.appendChild(head);
 
-          const row = el("div","tbl-row tbl-groups");
-          const name = el("input"); name.value = g.name||""; name.placeholder="Gruppenname";
-          name.addEventListener("input", ()=> g.name = name.value);
+        const row = el("div","tbl-row tbl-groups");
+        const name = el("input"); name.value = g.name||""; name.placeholder="Gruppenname";
+        name.addEventListener("input", ()=> g.name = name.value);
 
-          const enSel = el("select");
-          enSel.innerHTML='<option value="true">true</option><option value="false">false</option>';
-          enSel.value = String(!!g.enabled);
-          enSel.addEventListener("change", ()=> g.enabled = (enSel.value==="true"));
+        const enSel = el("select");
+        enSel.innerHTML='<option value="true">true</option><option value="false">false</option>';
+        enSel.value = String(!!g.enabled);
+        enSel.addEventListener("change", ()=> g.enabled = (enSel.value==="true"));
 
-          const del = el("button","btn btn-err","✖");
-          del.addEventListener("click", ()=>{
-            state.groups.splice(i,1); renderGroups();
-          });
+        const delBtn = el("button","btn btn-err","✖");
+        delBtn.addEventListener("click", ()=>{
+          state.groups.splice(i,1); renderGroups();
+        });
 
-          row.append(
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(name)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(enSel)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(del)})
-          );
-          table.appendChild(row);
+        row.append(
+          cell(name),
+          cell(enSel),
+          cell(delBtn)
+        );
+        table.appendChild(row);
 
-          body.appendChild(table);
+        body.appendChild(table);
         it.appendChild(body);
 
-        const actions = el("div","row"); // Reserve – derzeit keine Extra-Buttons nötig
+        const actions = el("div","row"); // Platzhalter
         it.appendChild(actions);
 
         box.appendChild(it);
@@ -500,58 +500,58 @@
 
         const body = el("div");
 
-          // „Tabelle“ mit Spaltentiteln für Ausgänge
-          const table = el("div","tbl");
-          const head  = el("div","tbl-head tbl-lights");
-          head.append(
-            Object.assign(el("div","tbl-cell"),{textContent:"GPIO"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"LEDC ch"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Pattern"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Rest ms (-1=Pat)"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Gruppe"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Phase ms"}),
-            Object.assign(el("div","tbl-cell"),{textContent:"Aktion"})
-          );
-          table.appendChild(head);
+        const table = el("div","tbl");
+        const head  = el("div","tbl-head tbl-lights");
+        head.append(
+          el("div","tbl-cell","GPIO"),
+          el("div","tbl-cell","LEDC ch"),
+          el("div","tbl-cell","Pattern"),
+          el("div","tbl-cell","Rest ms (-1=Pat)"),
+          el("div","tbl-cell","Gruppe"),
+          el("div","tbl-cell","Phase ms"),
+          el("div","tbl-cell","Aktion")
+        );
+        table.appendChild(head);
 
-          const row = el("div","tbl-row tbl-lights");
+        const row = el("div","tbl-row tbl-lights");
 
-          const p  = el("input"); p.type="number"; p.placeholder="GPIO"; p.value=L.pin??21;
-          const ch = el("input"); ch.type="number"; ch.placeholder="Kanal"; ch.value=L.channel??0;
-          const pidx = el("select");
-          pidx.innerHTML = "";
-          state.patterns.forEach((pt, ix)=>{
-            const o = el("option","",`[${ix}] ${pt.name||"(ohne Namen)"}`); o.value=ix; pidx.appendChild(o);
-          });
-          pidx.value = L.patternIndex??0;
+        const p  = el("input"); p.type="number"; p.placeholder="GPIO"; p.value=L.pin??21;
+        const ch = el("input"); ch.type="number"; ch.placeholder="Kanal"; ch.value=L.channel??0;
 
-          const rest = el("input"); rest.type="number"; rest.placeholder="-1 oder ms"; rest.value = L.restOverrideMs ?? -1;
-          const gid  = el("input"); gid.type="number"; gid.placeholder="Gruppe"; gid.value = L.groupId ?? 0;
-          const ph   = el("input"); ph.type="number"; ph.placeholder="ms"; ph.value = L.phase_ms ?? 0;
+        const pidx = el("select");
+        pidx.innerHTML = "";
+        state.patterns.forEach((pt, ix)=>{
+          const o = el("option","",`[${ix}] ${pt.name||"(ohne Namen)"}`); o.value=ix; pidx.appendChild(o);
+        });
+        pidx.value = L.patternIndex??0;
 
-          [p,ch,pidx,rest,gid,ph].forEach(inp=>inp.addEventListener("change", ()=>{
-            L.pin=Number(p.value); L.channel=Number(ch.value); L.patternIndex=Number(pidx.value);
-            L.restOverrideMs=Number(rest.value); L.groupId=Number(gid.value); L.phase_ms=Number(ph.value);
-          }));
+        const rest = el("input"); rest.type="number"; rest.placeholder="-1 oder ms"; rest.value = L.restOverrideMs ?? -1;
+        const gid  = el("input"); gid.type="number"; gid.placeholder="Gruppe"; gid.value = L.groupId ?? 0;
+        const ph   = el("input"); ph.type="number"; ph.placeholder="ms"; ph.value = L.phase_ms ?? 0;
 
-          const del = el("button","btn btn-err","✖");
-          del.addEventListener("click", ()=>{ state.lights.splice(i,1); renderLights(); });
+        [p,ch,pidx,rest,gid,ph].forEach(inp=>inp.addEventListener("change", ()=>{
+          L.pin=Number(p.value); L.channel=Number(ch.value); L.patternIndex=Number(pidx.value);
+          L.restOverrideMs=Number(rest.value); L.groupId=Number(gid.value); L.phase_ms=Number(ph.value);
+        }));
 
-          row.append(
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(p)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(ch)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(pidx)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(rest)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(gid)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(ph)}),
-            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(del)})
-          );
+        const delBtn = el("button","btn btn-err","✖");
+        delBtn.addEventListener("click", ()=>{ state.lights.splice(i,1); renderLights(); });
 
-          table.appendChild(row);
-          body.appendChild(table);
+        row.append(
+          cell(p),
+          cell(ch),
+          cell(pidx),
+          cell(rest),
+          cell(gid),
+          cell(ph),
+          cell(delBtn)
+        );
+
+        table.appendChild(row);
+        body.appendChild(table);
         it.appendChild(body);
 
-        const actions = el("div","row"); // Reserve
+        const actions = el("div","row"); // Platzhalter
         it.appendChild(actions);
 
         box.appendChild(it);
@@ -561,8 +561,8 @@
     // --- Collectors ---
     function collectConfigOnly(){
       return {
-        wifi: state.wifi, // wird vom Backend ggf. ignoriert bei getrennten Endpunkten
-        patterns: state.patterns.map(p=>({name:p.name||"", steps:(p.steps||[]).map(s=>({
+        wifi: state.wifi, // Backend kann sie ignorieren, wenn getrennte Endpunkte
+        patterns: (state.patterns||[]).map(p=>({name:p.name||"", steps:(p.steps||[]).map(s=>({
           duration_ms:Number(s.duration_ms||0),
           level:Number(s.level||0),
           fade:!!s.fade
@@ -645,10 +645,10 @@
     // WIFI controls -> keep state updated
     $("#wifi-enabled").addEventListener("change", e=> state.wifi.enabled = (e.target.value==="true"));
     $("#wifi-mode").addEventListener("change", e=> state.wifi.mode = e.target.value);
-    $("#ap-ssid").addEventListener("input", e=> state.wifi.ap.ssid = e.target.value);
-    $("#ap-pass").addEventListener("input", e=> state.wifi.ap.password = e.target.value);
-    $("#sta-ssid").addEventListener("input", e=> state.wifi.sta.ssid = e.target.value);
-    $("#sta-pass").addEventListener("input", e=> state.wifi.sta.password = e.target.value);
+    $("#ap-ssid").addEventListener("input", e=> { state.wifi.ap = state.wifi.ap||{}; state.wifi.ap.ssid = e.target.value; });
+    $("#ap-pass").addEventListener("input", e=> { state.wifi.ap = state.wifi.ap||{}; state.wifi.ap.password = e.target.value; });
+    $("#sta-ssid").addEventListener("input", e=> { state.wifi.sta = state.wifi.sta||{}; state.wifi.sta.ssid = e.target.value; });
+    $("#sta-pass").addEventListener("input", e=> { state.wifi.sta = state.wifi.sta||{}; state.wifi.sta.password = e.target.value; });
 
     $("#btn-wifi-save").addEventListener("click", saveWifiOnly);
     $("#btn-wifi-apply").addEventListener("click", applyWifiOnly);
