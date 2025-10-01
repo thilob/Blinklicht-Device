@@ -1,177 +1,701 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Blaulicht-Controller</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root{
-      --bg:#0f172a; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#22d3ee; --bad:#ef4444; --good:#22c55e;
-      --border:#1f2937;
+      --bg:#0f1115;--panel:#171a21;--muted:#8ea0b5;--txt:#e7eef7;--acc:#3aa3ff;--ok:#2ecc71;--warn:#ffb020;--err:#ff5c5c;
+      --br:14px;
     }
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-    header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-    header h1{margin:0;font-size:18px;font-weight:600}
-    header .pill{font-size:12px;padding:3px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
-    main{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr;gap:16px}
-    @media(min-width:900px){main{grid-template-columns:1fr 1fr}}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
-    h2{margin:0 0 12px 0;font-size:16px}
-    label{font-size:12px;color:var(--muted)}
-    input,select,button,textarea{
-      width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0b1220;color:var(--text);
-    }
-    input[type="checkbox"]{width:auto}
-    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-    .mt8{margin-top:8px}
-    .mt12{margin-top:12px}
-    .mt16{margin-top:16px}
-    .muted{color:var(--muted);font-size:12px}
-    .btn{cursor:pointer}
-    .btn.primary{background:linear-gradient(90deg,#06b6d4,#22d3ee);border:none;color:#001018;font-weight:600}
-    .btn.danger{background:#3b0f13;border-color:#651b1f;color:#fecaca}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--border);padding:8px;text-align:left;font-size:14px}
-    th{color:#9ca3af}
-    .flex{display:flex;gap:8px;align-items:center}
-    .right{justify-content:flex-end}
-    .ok{color:var(--good)} .bad{color:var(--bad)}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif}
+    a{color:var(--acc);text-decoration:none}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    header{display:flex;gap:12px;align-items:center;margin:6px 0 16px}
+    .badge{padding:6px 10px;border-radius:999px;background:var(--panel);color:var(--muted);font-size:12px}
+    .card{background:var(--panel);border-radius:var(--br);padding:16px;margin:12px 0;box-shadow:0 10px 20px rgba(0,0,0,.25)}
+    .grid{display:grid;gap:12px}
+    @media(min-width:900px){.grid.cols-2{grid-template-columns:1fr 1fr}}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+    .tab-btn{background:#12151b;border:1px solid #222630;color:var(--muted);padding:10px 12px;border-radius:10px;cursor:pointer}
+    .tab-btn.active{border-color:var(--acc);color:var(--txt)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px;background:#0e1116;border:1px solid #20242e;border-radius:10px;color:var(--txt)}
+    .hl{color:var(--acc)}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid #273041;background:#11151b;color:var(--txt);cursor:pointer}
+    .btn:hover{border-color:#3a475a}
+    .btn-acc{border-color:var(--acc);color:#fff}
+    .btn-ok{border-color:var(--ok);color:#fff}
+    .btn-warn{border-color:var(--warn);color:#fff}
+    .btn-err{border-color:var(--err);color:#fff}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
+    .list{border:1px solid #232a35;border-radius:12px;overflow:hidden}
+    .list .head,.list .item{display:grid;grid-template-columns:48px 1fr auto;gap:8px;padding:10px 12px;align-items:center}
+    .list .head{background:#12151a;color:var(--muted);font-size:12px}
+    .list .item{border-top:1px solid #202736}
+    .pill{font-size:12px;border:1px solid #2a3342;border-radius:999px;padding:4px 8px;color:#c5d3e8}
+    .muted{color:var(--muted)}
+    .hr{height:1px;background:#202736;margin:14px 0}
+    .note{font-size:12px;color:var(--muted)}
+    .tag{font-size:11px;color:#a6b5cc}
+    .toast{position:fixed;right:12px;bottom:12px;background:#12161e;border:1px solid #2b3341;border-radius:12px;padding:10px 12px;max-width:360px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    .toast.ok{border-color:var(--ok)}
+    .toast.warn{border-color:var(--warn)}
+    .toast.err{border-color:var(--err)}
+    code{background:#0b0e12;border:1px solid #1a2130;border-radius:8px;padding:0 6px}
+
+    /* Mini-Tabellen (für Steps / Groups / Lights Spaltenüberschriften) */
+    .tbl{width:100%;border:1px solid #232a35;border-radius:10px;overflow:hidden;margin-top:8px}
+    .tbl-row,.tbl-head{display:grid;gap:8px;align-items:center}
+    .tbl-head{background:#12151a;color:var(--muted);font-size:12px}
+    .tbl-row{border-top:1px solid #202736}
+    .tbl-cell{padding:8px 10px}
+    .tbl-head .tbl-cell{padding:10px 10px}
+    .tbl-steps{grid-template-columns: 140px 160px 140px 60px}
+    .tbl-groups{grid-template-columns: 1fr 160px 100px}
+    .tbl-lights{grid-template-columns: 90px 100px minmax(160px,1fr) 150px 110px 110px 80px}
+    .tbl input,.tbl select{width:100%}
   </style>
 </head>
 <body>
-  <header>
-    <h1>🚨 Blaulicht-Controller</h1>
-    <span id="badgeMode" class="pill">…</span>
-    <span id="badgeHost" class="pill">…</span>
-  </header>
+  <div class="wrap">
+    <header>
+      <h1 style="margin:0">🚨 Blaulicht-Controller</h1>
+      <span id="badge-mode" class="badge">Lade…</span>
+      <span id="badge-ip" class="badge">IP –</span>
+      <span id="badge-host" class="badge">Host –</span>
+    </header>
 
-  <main>
-    <!-- WLAN -->
-    <section class="card">
-      <h2>WLAN</h2>
-      <div class="row">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="status">Status</button>
+      <button class="tab-btn" data-tab="wifi">WLAN</button>
+      <button class="tab-btn" data-tab="patterns">Patterns</button>
+      <button class="tab-btn" data-tab="groups">Gruppen</button>
+      <button class="tab-btn" data-tab="lights">Ausgänge</button>
+    </div>
+
+    <!-- STATUS -->
+    <section id="tab-status" class="card">
+      <div class="grid cols-2">
         <div>
-          <label><input type="checkbox" id="wifi_enabled"> WLAN aktiv</label>
+          <h3>System</h3>
+          <div id="sysinfo" class="note">–</div>
+          <div class="hr"></div>
+          <div class="row">
+            <button class="btn" id="btn-refresh">↻ Aktualisieren</button>
+            <button class="btn btn-warn" id="btn-reload">GUI neu laden</button>
+          </div>
+          <p class="note" style="margin-top:10px">
+            Captive-Portal aktiv im AP-Modus. Im STA-Modus ist die Seite auch über <code>http://&lt;hostname&gt;.local</code> erreichbar.
+          </p>
         </div>
         <div>
-          <label for="wifi_mode">Modus</label>
-          <select id="wifi_mode">
-            <option value="ap">Access Point</option>
+          <h3>Hinweise</h3>
+          <ul class="note" style="margin-top:6px">
+            <li>„Speichern“ schreibt nur ins Flash (LittleFS), ändert aber nichts live.</li>
+            <li>„Anwenden (LEDs)“ setzt Muster/Zuordnungen live – ohne WLAN-Neustart.</li>
+            <li>„Anwenden (WLAN)“ verändert nur das WLAN (AP/STA). Verbindung kann abbrechen.</li>
+          </ul>
+          <div id="compat" class="note"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WLAN -->
+    <section id="tab-wifi" class="card" style="display:none">
+      <h3>WLAN</h3>
+      <div class="grid cols-2">
+        <div>
+          <label>WLAN aktiviert</label>
+          <select id="wifi-enabled">
+            <option value="true">Ein</option>
+            <option value="false">Aus</option>
+          </select>
+        </div>
+        <div>
+          <label>Modus</label>
+          <select id="wifi-mode">
+            <option value="ap">Access Point (AP)</option>
             <option value="sta">Station (Client)</option>
           </select>
         </div>
       </div>
 
-      <div class="row mt12">
+      <div class="hr"></div>
+
+      <h4>AP-Einstellungen</h4>
+      <div class="grid cols-2">
         <div>
-          <label for="ap_ssid">AP SSID</label>
-          <input id="ap_ssid" placeholder="leer = automatisch">
+          <label>SSID (leer = automatisch „Blaulicht-XXXX“)</label>
+          <input id="ap-ssid" placeholder="Blaulicht-XXXX" />
         </div>
         <div>
-          <label for="ap_pass">AP Passwort (optional)</label>
-          <input id="ap_pass" placeholder="leer = offen">
+          <label>Passwort (leer = offen)</label>
+          <input id="ap-pass" type="password" placeholder="(optional)" />
         </div>
       </div>
 
-      <div class="row mt12">
+      <div class="hr"></div>
+
+      <h4>STA-Einstellungen</h4>
+      <div class="grid cols-2">
         <div>
-          <label for="sta_ssid">STA SSID</label>
-          <input id="sta_ssid" placeholder="WLAN-Name des Routers">
+          <label>SSID</label>
+          <input id="sta-ssid" placeholder="WLAN-Name" />
         </div>
         <div>
-          <label for="sta_pass">STA Passwort</label>
-          <input id="sta_pass" placeholder="WLAN-Passwort">
+          <label>Passwort</label>
+          <input id="sta-pass" type="password" placeholder="WLAN-Passwort" />
         </div>
       </div>
 
-      <div class="flex right mt16">
-        <button class="btn" id="btnReloadWifi">WLAN-Status</button>
-        <button class="btn primary" id="btnSaveWifi">Speichern & Anwenden (WLAN)</button>
+      <div class="hr"></div>
+      <div class="toolbar">
+        <button class="btn" id="btn-wifi-save">💾 Speichern</button>
+        <button class="btn btn-ok" id="btn-wifi-apply">▶ Anwenden (WLAN)</button>
       </div>
-      <p class="muted mt8">Im STA-Modus zusätzlich unter <b>http://&lt;hostname&gt;.local</b> erreichbar (mDNS).</p>
+      <p class="note" id="wifi-warning" style="margin-top:8px"></p>
     </section>
 
-    <!-- Gruppen -->
-    <section class="card">
-      <h2>Gruppen</h2>
-      <table>
-        <thead><tr><th>ID</th><th>Name</th><th>Aktiv</th><th></th></tr></thead>
-        <tbody id="tblGroups"></tbody>
-      </table>
-      <div class="row mt12">
-        <input id="g_id" placeholder="ID (Zahl)">
-        <input id="g_name" placeholder="Name">
-      </div>
-      <div class="flex right mt12">
-        <button class="btn" id="btnGroupAdd">Gruppe anlegen</button>
-      </div>
-    </section>
-
-    <!-- Patterns -->
-    <section class="card">
-      <h2>Patterns</h2>
-      <div class="row">
-        <div>
-          <label for="pat_name">Pattern-Name</label>
-          <input id="pat_name" placeholder="z. B. DoppelStrobe">
-        </div>
-        <div class="flex right">
-          <button class="btn" id="btnPatAdd">Leeres Pattern anlegen</button>
+    <!-- PATTERNS -->
+    <section id="tab-patterns" class="card" style="display:none">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <h3 style="margin:0">Patterns</h3>
+        <div class="toolbar">
+          <input id="pat-new-name" placeholder="Neues Pattern: Name" style="min-width:220px" />
+          <button class="btn btn-acc" id="btn-pat-add">＋ Pattern</button>
+          <button class="btn" id="btn-pat-save">💾 Speichern</button>
+          <button class="btn btn-ok" id="btn-pat-apply">▶ Anwenden (LEDs)</button>
         </div>
       </div>
 
-      <div class="mt12">
-        <table>
-          <thead><tr><th>#</th><th>Name</th><th>Steps</th><th></th></tr></thead>
-          <tbody id="tblPat"></tbody>
-        </table>
+      <div id="pat-list" class="list" style="margin-top:10px">
+        <div class="head">
+          <div>#</div><div>Name & Schritte</div><div>Aktion</div>
+        </div>
+        <!-- items per JS -->
       </div>
 
-      <div class="mt12">
-        <h3 style="margin:0 0 8px 0;font-size:14px;color:#9ca3af">Steps in ausgewähltem Pattern</h3>
-        <div class="row3">
-          <input id="st_dur" placeholder="Dauer ms">
-          <input id="st_lvl" placeholder="Level 0..255">
-          <select id="st_fade"><option value="0">hart</option><option value="1">weich</option></select>
-        </div>
-        <div class="flex right mt12">
-          <button class="btn" id="btnStepAdd">Step hinzufügen</button>
-        </div>
-        <table class="mt12">
-          <thead><tr><th>#</th><th>Dauer</th><th>Level</th><th>Fade</th><th></th></tr></thead>
-          <tbody id="tblSteps"></tbody>
-        </table>
+      <div class="hr"></div>
+      <div class="note">
+        <strong>Spalten-Erklärung (Schritte innerhalb eines Patterns):</strong>
+        <ul>
+          <li><b>Dauer (ms)</b>: Wie lange der Schritt läuft (Millisekunden).</li>
+          <li><b>Level (0–255)</b>: Zielhelligkeit; 0 = aus, 255 = volle Helligkeit.</li>
+          <li><b>Fade</b>: „true“ = weicher Übergang (Rampe) zur Zielhelligkeit; „false“ = harter Sprung.</li>
+          <li><b>Aktion</b>: Schritt entfernen.</li>
+        </ul>
+        Hinweis: Der <b>letzte Schritt</b> gilt als Pause/Ruhezeit des Musters.
       </div>
     </section>
 
-    <!-- Lights -->
-    <section class="card">
-      <h2>Ausgänge</h2>
-      <table>
-        <thead><tr><th>#</th><th>Pin</th><th>Ch</th><th>Pat</th><th>Rest</th><th>Grp</th><th>Phase</th><th></th></tr></thead>
-        <tbody id="tblLights"></tbody>
-      </table>
+    <!-- GRUPPEN -->
+    <section id="tab-groups" class="card" style="display:none">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <h3 style="margin:0">Gruppen</h3>
+        <div class="toolbar">
+          <input id="grp-new-id" type="number" placeholder="ID" style="width:120px" />
+          <input id="grp-new-name" placeholder="Name" style="min-width:220px" />
+          <button class="btn btn-acc" id="btn-grp-add">＋ Gruppe</button>
+          <button class="btn" id="btn-grp-save">💾 Speichern</button>
+          <button class="btn btn-ok" id="btn-grp-apply">▶ Anwenden (LEDs)</button>
+        </div>
+      </div>
 
-      <div class="row3 mt12">
-        <input id="l_pin"   placeholder="Pin">
-        <input id="l_ch"    placeholder="LEDC">
-        <input id="l_pidx"  placeholder="Pattern">
+      <div id="grp-list" class="list" style="margin-top:10px">
+        <div class="head">
+          <div>ID</div><div>Name / Status</div><div>Aktion</div>
+        </div>
+        <!-- items per JS -->
       </div>
-      <div class="row3 mt12">
-        <input id="l_rest"  placeholder="Rest ms (-1)">
-        <input id="l_gid"   placeholder="Gruppe-ID">
-        <input id="l_phase" placeholder="Phase ms">
-      </div>
-      <div class="flex right mt12">
-        <button class="btn" id="btnLightAdd">Ausgang anlegen</button>
+
+      <div class="hr"></div>
+      <div class="note">
+        <strong>Spalten-Erklärung (Gruppen):</strong>
+        <ul>
+          <li><b>ID</b>: Eindeutige Gruppennummer (frei wählbar).</li>
+          <li><b>Name</b> / <b>enabled</b>: Anzeigename; „enabled“ an/aus schaltet die gesamte Gruppe (Zeit wird eingefroren).</li>
+          <li><b>Aktion</b>: Gruppe löschen.</li>
+        </ul>
       </div>
     </section>
 
-    <!-- Aktionen -->
-    <section class="card">
-      <h2>Aktionen</h2>
-      <div class="flex right">
-        <button class="btn" id="btnSaveLogic">Speichern (Logik)</button>
-        <button class="btn danger" id="btnReloadPage">Se
+    <!-- LIGHTS -->
+    <section id="tab-lights" class="card" style="display:none">
+      <div class="row" style="justify-content:space-between;align-items:flex-end">
+        <h3 style="margin:0">Ausgänge</h3>
+        <div class="toolbar">
+          <input id="l-pin" type="number" placeholder="GPIO" style="width:110px" />
+          <input id="l-ch" type="number" placeholder="LEDC ch" style="width:120px" />
+          <select id="l-pidx" style="min-width:160px"></select>
+          <input id="l-rest" type="number" placeholder="Rest ms (-1=Pat)" style="width:150px" />
+          <input id="l-gid"  type="number" placeholder="Gruppe" style="width:120px" />
+          <input id="l-phase" type="number" placeholder="Phase ms" style="width:130px" />
+          <button class="btn btn-acc" id="btn-light-add">＋ Ausgang</button>
+          <button class="btn" id="btn-light-save">💾 Speichern</button>
+          <button class="btn btn-ok" id="btn-light-apply">▶ Anwenden (LEDs)</button>
+        </div>
+      </div>
+
+      <div id="light-list" class="list" style="margin-top:10px">
+        <div class="head">
+          <div>#</div><div>Konfiguration</div><div>Aktion</div>
+        </div>
+        <!-- items per JS -->
+      </div>
+
+      <div class="hr"></div>
+      <div class="note">
+        <strong>Spalten-Erklärung (Ausgänge):</strong>
+        <ul>
+          <li><b>GPIO</b>: Pin-Nummer am ESP32.</li>
+          <li><b>LEDC ch</b>: PWM-Kanal (0–15); jeder Ausgang braucht einen eigenen Kanal.</li>
+          <li><b>Pattern</b>: Verknüpftes Blinkmuster.</li>
+          <li><b>Rest ms (-1=Pat)</b>: Dauer des letzten Schritt (Pause). <code>-1</code> = Pause aus Pattern übernehmen.</li>
+          <li><b>Gruppe</b>: Gruppennummer; Gruppen können komplett an/aus geschaltet werden.</li>
+          <li><b>Phase ms</b>: Zeitverschiebung innerhalb eines Pattern-Zyklus (für versetztes Blinken).</li>
+          <li><b>Aktion</b>: Ausgang löschen.</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <script>
+    // --- Utilities ---
+    const $ = sel => document.querySelector(sel);
+    const el = (tag, cls, txt) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (txt !== undefined) n.textContent = txt;
+      return n;
+    };
+    const toast = (msg, kind="") => {
+      const t = $("#toast");
+      t.className = "toast" + (kind?(" "+kind):"");
+      t.innerHTML = msg;
+      t.style.display = "block";
+      setTimeout(()=>t.style.display="none", 3000);
+    };
+
+    // --- API compatibility detection ---
+    let hasWifiAPI = false;
+    let hasApplyConfig = false;
+    let hasApplyWifi = false;
+
+    async function detectApis(){
+      const tests = [
+        fetch("/api/wifi", {method:"OPTIONS"}).then(r=>{ if (r.ok) hasWifiAPI = true; }).catch(()=>{}),
+        fetch("/api/config/apply", {method:"OPTIONS"}).then(r=>{ if (r.ok) hasApplyConfig = true; }).catch(()=>{}),
+        fetch("/api/wifi/apply", {method:"OPTIONS"}).then(r=>{ if (r.ok) hasApplyWifi = true; }).catch(()=>{}),
+      ];
+      await Promise.all(tests);
+      const compat = $("#compat");
+      if (!hasWifiAPI || !hasApplyConfig || !hasApplyWifi) {
+        compat.innerHTML = `
+          <p><span class="tag">Kompatibilität</span><br>
+          Backend bietet nicht alle separaten Endpunkte. Die UI <b>fällt zurück</b> auf
+          <code>PUT /api/config</code>. Änderungen am WLAN können dadurch einen WLAN-Neustart auslösen.</p>`;
+      } else {
+        compat.textContent = "Alle getrennten Endpunkte vorhanden.";
+      }
+    }
+
+    // --- State ---
+    const state = {
+      wifi: {enabled:true, mode:"ap", ap:{ssid:"",password:""}, sta:{ssid:"",password:""}},
+      patterns: [],
+      groups: [],
+      lights: []
+    };
+
+    // --- Fetch + Render ---
+    async function loadAll(){
+      const r = await fetch("/api/config");
+      if (!r.ok){ toast("Konnte /api/config nicht laden","err"); return; }
+      const cfg = await r.json();
+      // Merge defensively
+      state.patterns = cfg.patterns || [];
+      state.groups   = cfg.groups   || [];
+      state.lights   = cfg.lights   || [];
+      state.wifi     = cfg.wifi     || state.wifi;
+
+      $("#badge-mode").textContent = "Modus: " + (state.wifi?.mode || "ap").toUpperCase();
+      $("#badge-ip").textContent = "IP: " + (location.hostname || "192.168.4.1");
+      $("#badge-host").textContent = "Host: " + (location.hostname || "—");
+
+      renderWifi();
+      renderPatterns();
+      renderGroups();
+      renderLights();
+      renderSysinfo();
+    }
+
+    async function renderSysinfo(){
+      const r = await fetch("/api/sysinfo");
+      if(!r.ok){ $("#sysinfo").textContent = "–"; return; }
+      const s = await r.json();
+      $("#sysinfo").innerHTML = `
+        LEDC: ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle gesamt: ${s.max_ledc_channels}<br>
+        Ausgänge konfiguriert: ${s.num_lights}
+      `;
+    }
+
+    function renderWifi(){
+      $("#wifi-enabled").value = String(!!state.wifi.enabled);
+      $("#wifi-mode").value    = state.wifi.mode || "ap";
+      $("#ap-ssid").value      = state.wifi.ap?.ssid || "";
+      $("#ap-pass").value      = state.wifi.ap?.password || "";
+      $("#sta-ssid").value     = state.wifi.sta?.ssid || "";
+      $("#sta-pass").value     = state.wifi.sta?.password || "";
+
+      $("#wifi-warning").textContent =
+        hasWifiAPI ? "" :
+        "Warnung: getrennte WLAN-Endpunkte nicht verfügbar – Speichern kann einen WLAN-Neustart auslösen.";
+    }
+
+    function renderPatterns(){
+      // dropdown for Lights
+      const dd = $("#l-pidx"); dd.innerHTML = "";
+      state.patterns.forEach((p, i)=>{
+        const o = el("option","",`[${i}] ${p.name||"(ohne Namen)"}`);
+        o.value = i; dd.appendChild(o);
+      });
+
+      const box = $("#pat-list");
+      box.querySelectorAll(".item").forEach(n=>n.remove());
+
+      state.patterns.forEach((p, idx)=>{
+        const it = el("div","item");
+        it.appendChild(el("div","pill", idx));
+
+        const body = el("div");
+
+          const name = el("input"); name.value = p.name||""; name.placeholder = "Pattern-Name";
+          name.addEventListener("input", ()=> p.name = name.value);
+          body.appendChild(name);
+
+          // Steps "Tabelle" mit Spaltenüberschriften
+          const table = el("div","tbl");
+          const head  = el("div","tbl-head tbl-steps");
+          head.append(
+            Object.assign(el("div","tbl-cell"),{textContent:"Dauer (ms)"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Level (0–255)"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Fade"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Aktion"})
+          );
+          table.appendChild(head);
+
+          p.steps = p.steps || [];
+          p.steps.forEach((s, sidx)=>{
+            const row = el("div","tbl-row tbl-steps");
+            const d = el("input"); d.type="number"; d.placeholder="ms"; d.value = s.duration_ms ?? 0;
+            const l = el("input"); l.type="number"; l.placeholder="0..255"; l.min=0;l.max=255; l.value = s.level ?? 0;
+            const f = el("select"); f.innerHTML='<option value="false">false</option><option value="true">true</option>'; f.value=String(!!s.fade);
+            const del = el("button","btn btn-err","✖");
+
+            d.addEventListener("change", ()=> s.duration_ms = Number(d.value));
+            l.addEventListener("change", ()=> s.level       = Number(l.value));
+            f.addEventListener("change", ()=> s.fade        = (f.value==="true"));
+            del.addEventListener("click", ()=>{
+              p.steps.splice(sidx,1);
+              renderPatterns();
+            });
+
+            row.append(
+              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(d)}),
+              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(l)}),
+              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(f)}),
+              Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(del)})
+            );
+            table.appendChild(row);
+          });
+
+          // add step
+          const addRow = el("div","row"); addRow.style.marginTop="8px";
+          const add = el("button","btn btn-acc","＋ Schritt");
+          add.addEventListener("click", ()=>{
+            p.steps.push({duration_ms:100, level:0, fade:false});
+            renderPatterns();
+          });
+          addRow.appendChild(add);
+
+          body.append(table, addRow);
+        it.appendChild(body);
+
+        const actions = el("div","row");
+        const rm = el("button","btn btn-err","Pattern löschen");
+        rm.addEventListener("click", ()=>{
+          state.patterns.splice(idx,1);
+          renderPatterns();
+        });
+        actions.appendChild(rm);
+        it.appendChild(actions);
+
+        box.appendChild(it);
+      });
+    }
+
+    function renderGroups(){
+      const box = $("#grp-list");
+      box.querySelectorAll(".item").forEach(n=>n.remove());
+      state.groups.forEach((g, i)=>{
+        const it = el("div","item");
+        it.appendChild(el("div","pill", g.id));
+
+        const body = el("div");
+
+          // „Tabelle“ mit Spaltentiteln für Gruppen
+          const table = el("div","tbl");
+          const head  = el("div","tbl-head tbl-groups");
+          head.append(
+            Object.assign(el("div","tbl-cell"),{textContent:"Name"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"enabled"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Aktion"})
+          );
+          table.appendChild(head);
+
+          const row = el("div","tbl-row tbl-groups");
+          const name = el("input"); name.value = g.name||""; name.placeholder="Gruppenname";
+          name.addEventListener("input", ()=> g.name = name.value);
+
+          const enSel = el("select");
+          enSel.innerHTML='<option value="true">true</option><option value="false">false</option>';
+          enSel.value = String(!!g.enabled);
+          enSel.addEventListener("change", ()=> g.enabled = (enSel.value==="true"));
+
+          const del = el("button","btn btn-err","✖");
+          del.addEventListener("click", ()=>{
+            state.groups.splice(i,1); renderGroups();
+          });
+
+          row.append(
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(name)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(enSel)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(del)})
+          );
+          table.appendChild(row);
+
+          body.appendChild(table);
+        it.appendChild(body);
+
+        const actions = el("div","row"); // Reserve – derzeit keine Extra-Buttons nötig
+        it.appendChild(actions);
+
+        box.appendChild(it);
+      });
+    }
+
+    function renderLights(){
+      const box = $("#light-list");
+      box.querySelectorAll(".item").forEach(n=>n.remove());
+      state.lights.forEach((L, i)=>{
+        const it = el("div","item");
+        it.appendChild(el("div","pill", i));
+
+        const body = el("div");
+
+          // „Tabelle“ mit Spaltentiteln für Ausgänge
+          const table = el("div","tbl");
+          const head  = el("div","tbl-head tbl-lights");
+          head.append(
+            Object.assign(el("div","tbl-cell"),{textContent:"GPIO"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"LEDC ch"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Pattern"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Rest ms (-1=Pat)"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Gruppe"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Phase ms"}),
+            Object.assign(el("div","tbl-cell"),{textContent:"Aktion"})
+          );
+          table.appendChild(head);
+
+          const row = el("div","tbl-row tbl-lights");
+
+          const p  = el("input"); p.type="number"; p.placeholder="GPIO"; p.value=L.pin??21;
+          const ch = el("input"); ch.type="number"; ch.placeholder="Kanal"; ch.value=L.channel??0;
+          const pidx = el("select");
+          pidx.innerHTML = "";
+          state.patterns.forEach((pt, ix)=>{
+            const o = el("option","",`[${ix}] ${pt.name||"(ohne Namen)"}`); o.value=ix; pidx.appendChild(o);
+          });
+          pidx.value = L.patternIndex??0;
+
+          const rest = el("input"); rest.type="number"; rest.placeholder="-1 oder ms"; rest.value = L.restOverrideMs ?? -1;
+          const gid  = el("input"); gid.type="number"; gid.placeholder="Gruppe"; gid.value = L.groupId ?? 0;
+          const ph   = el("input"); ph.type="number"; ph.placeholder="ms"; ph.value = L.phase_ms ?? 0;
+
+          [p,ch,pidx,rest,gid,ph].forEach(inp=>inp.addEventListener("change", ()=>{
+            L.pin=Number(p.value); L.channel=Number(ch.value); L.patternIndex=Number(pidx.value);
+            L.restOverrideMs=Number(rest.value); L.groupId=Number(gid.value); L.phase_ms=Number(ph.value);
+          }));
+
+          const del = el("button","btn btn-err","✖");
+          del.addEventListener("click", ()=>{ state.lights.splice(i,1); renderLights(); });
+
+          row.append(
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(p)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(ch)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(pidx)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(rest)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(gid)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(ph)}),
+            Object.assign(el("div","tbl-cell"),{appendChild: (x=>x)(del)})
+          );
+
+          table.appendChild(row);
+          body.appendChild(table);
+        it.appendChild(body);
+
+        const actions = el("div","row"); // Reserve
+        it.appendChild(actions);
+
+        box.appendChild(it);
+      });
+    }
+
+    // --- Collectors ---
+    function collectConfigOnly(){
+      return {
+        wifi: state.wifi, // wird vom Backend ggf. ignoriert bei getrennten Endpunkten
+        patterns: state.patterns.map(p=>({name:p.name||"", steps:(p.steps||[]).map(s=>({
+          duration_ms:Number(s.duration_ms||0),
+          level:Number(s.level||0),
+          fade:!!s.fade
+        }))})),
+        groups: (state.groups||[]).map(g=>({id:Number(g.id), name:g.name||"", enabled:!!g.enabled})),
+        lights: (state.lights||[]).map(L=>({
+          pin:Number(L.pin), channel:Number(L.channel), patternIndex:Number(L.patternIndex),
+          restOverrideMs:Number(L.restOverrideMs), groupId:Number(L.groupId), phase_ms:Number(L.phase_ms)
+        }))
+      };
+    }
+    function collectWifiOnly(){
+      const w = state.wifi || {};
+      return {
+        enabled: (String(w.enabled)!=="false"),
+        mode: (w.mode||"ap").toLowerCase(),
+        ap: {ssid: w.ap?.ssid || "", password: w.ap?.password || ""},
+        sta:{ssid: w.sta?.ssid|| "", password: w.sta?.password|| ""}
+      };
+    }
+
+    // --- Actions: Save/Apply ---
+    async function saveConfigOnly(){
+      const payload = collectConfigOnly();
+      const r = await fetch("/api/config", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
+      if (!r.ok){ toast("Speichern fehlgeschlagen (Config)","err"); return false; }
+      toast("Gespeichert (Config)","ok"); return true;
+    }
+    async function applyConfigOnly(){
+      if (hasApplyConfig){
+        const r = await fetch("/api/config/apply",{method:"POST"});
+        if (!r.ok){ toast("Anwenden (LEDs) fehlgeschlagen","err"); return; }
+        toast("LED-Konfiguration angewendet","ok");
+      } else {
+        await saveConfigOnly();
+        toast("Angewendet via Fallback (PUT /api/config)","warn");
+      }
+    }
+
+    async function saveWifiOnly(){
+      if (hasWifiAPI){
+        const r = await fetch("/api/wifi", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(collectWifiOnly())});
+        if (!r.ok){ toast("Speichern fehlgeschlagen (WLAN)","err"); return false; }
+        toast("Gespeichert (WLAN)","ok"); return true;
+      } else {
+        const cfg = collectConfigOnly();
+        cfg.wifi = collectWifiOnly();
+        const r = await fetch("/api/config",{method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg)});
+        if (!r.ok){ toast("Speichern fehlgeschlagen (Fallback /api/config)","err"); return false; }
+        toast("Gespeichert (Fallback) – WLAN könnte neu starten","warn"); return true;
+      }
+    }
+    async function applyWifiOnly(){
+      if (hasApplyWifi){
+        const r = await fetch("/api/wifi/apply",{method:"POST"});
+        if (!r.ok){ toast("Anwenden (WLAN) fehlgeschlagen","err"); return; }
+        toast("WLAN angewendet (AP/STA). Verbindung kann wechseln.","ok");
+      } else {
+        await saveWifiOnly();
+        toast("WLAN angewendet via Fallback. Verbindung kann wechseln.","warn");
+      }
+    }
+
+    // --- Tab switching ---
+    document.querySelectorAll(".tab-btn").forEach(b=>{
+      b.addEventListener("click", ()=>{
+        document.querySelectorAll(".tab-btn").forEach(x=>x.classList.remove("active"));
+        b.classList.add("active");
+        const tab = b.dataset.tab;
+        ["status","wifi","patterns","groups","lights"].forEach(id=>{
+          $("#tab-"+id).style.display = (id===tab) ? "" : "none";
+        });
+      });
+    });
+
+    // --- Wire buttons ---
+    $("#btn-refresh").addEventListener("click", loadAll);
+    $("#btn-reload").addEventListener("click", ()=>location.reload());
+
+    // WIFI controls -> keep state updated
+    $("#wifi-enabled").addEventListener("change", e=> state.wifi.enabled = (e.target.value==="true"));
+    $("#wifi-mode").addEventListener("change", e=> state.wifi.mode = e.target.value);
+    $("#ap-ssid").addEventListener("input", e=> state.wifi.ap.ssid = e.target.value);
+    $("#ap-pass").addEventListener("input", e=> state.wifi.ap.password = e.target.value);
+    $("#sta-ssid").addEventListener("input", e=> state.wifi.sta.ssid = e.target.value);
+    $("#sta-pass").addEventListener("input", e=> state.wifi.sta.password = e.target.value);
+
+    $("#btn-wifi-save").addEventListener("click", saveWifiOnly);
+    $("#btn-wifi-apply").addEventListener("click", applyWifiOnly);
+
+    // Patterns toolbar
+    $("#btn-pat-add").addEventListener("click", ()=>{
+      const n = $("#pat-new-name").value.trim() || "Pattern";
+      state.patterns.push({name:n, steps:[]});
+      $("#pat-new-name").value="";
+      renderPatterns();
+    });
+    $("#btn-pat-save").addEventListener("click", saveConfigOnly);
+    $("#btn-pat-apply").addEventListener("click", applyConfigOnly);
+
+    // Groups toolbar
+    $("#btn-grp-add").addEventListener("click", ()=>{
+      const id = Number($("#grp-new-id").value||0);
+      const name = $("#grp-new-name").value.trim() || ("Gruppe "+id);
+      state.groups.push({id, name, enabled:true});
+      $("#grp-new-id").value=""; $("#grp-new-name").value="";
+      renderGroups();
+    });
+    $("#btn-grp-save").addEventListener("click", saveConfigOnly);
+    $("#btn-grp-apply").addEventListener("click", applyConfigOnly);
+
+    // Lights toolbar
+    $("#btn-light-add").addEventListener("click", ()=>{
+      const L = {
+        pin:Number($("#l-pin").value||21),
+        channel:Number($("#l-ch").value||0),
+        patternIndex:Number($("#l-pidx").value||0),
+        restOverrideMs:Number($("#l-rest").value||-1),
+        groupId:Number($("#l-gid").value||0),
+        phase_ms:Number($("#l-phase").value||0),
+      };
+      state.lights.push(L);
+      $("#l-pin").value=$("#l-ch").value=$("#l-rest").value=$("#l-gid").value=$("#l-phase").value="";
+      renderLights();
+    });
+    $("#btn-light-save").addEventListener("click", saveConfigOnly);
+    $("#btn-light-apply").addEventListener("click", applyConfigOnly);
+
+    // Init
+    (async ()=>{
+      await detectApis();
+      await loadAll();
+    })();
+  </script>
+</body>
+</html>
