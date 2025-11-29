@@ -1,65 +1,308 @@
 <!doctype html>
 <html lang="de">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Blaulicht-Controller</title>
   <style>
-    :root{
-      --bg:#0f1115;--panel:#171a21;--muted:#8ea0b5;--txt:#e7eef7;--acc:#3aa3ff;--ok:#2ecc71;--warn:#ffb020;--err:#ff5c5c;
-      --br:14px;
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --muted: #8ea0b5;
+      --txt: #e7eef7;
+      --acc: #3aa3ff;
+      --ok: #2ecc71;
+      --warn: #ffb020;
+      --err: #ff5c5c;
+      --br: 14px;
     }
-    *{box-sizing:border-box}
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif}
-    a{color:var(--acc);text-decoration:none}
-    .wrap{max-width:1100px;margin:0 auto;padding:16px}
-    header{display:flex;gap:12px;align-items:center;margin:6px 0 16px}
-    .badge{padding:6px 10px;border-radius:999px;background:var(--panel);color:var(--muted);font-size:12px}
-    .card{background:var(--panel);border-radius:var(--br);padding:16px;margin:12px 0;box-shadow:0 10px 20px rgba(0,0,0,.25)}
-    .grid{display:grid;gap:12px}
-    @media(min-width:900px){.grid.cols-2{grid-template-columns:1fr 1fr}}
-    .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
-    .tab-btn{background:#12151b;border:1px solid #222630;color:var(--muted);padding:10px 12px;border-radius:10px;cursor:pointer}
-    .tab-btn.active{border-color:var(--acc);color:var(--txt)}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-    input,select,textarea{width:100%;padding:10px;background:#0e1116;border:1px solid #20242e;border-radius:10px;color:var(--txt)}
-    .hl{color:var(--acc)}
-    .btn{padding:10px 14px;border-radius:10px;border:1px solid #273041;background:#11151b;color:var(--txt);cursor:pointer}
-    .btn:hover{border-color:#3a475a}
-    .btn-acc{border-color:var(--acc);color:#fff}
-    .btn-ok{border-color:var(--ok);color:#fff}
-    .btn-warn{border-color:var(--warn);color:#fff}
-    .btn-err{border-color:var(--err);color:#fff}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap}
-    .list{border:1px solid #232a35;border-radius:12px;overflow:hidden}
-    .list .head,.list .item{display:grid;grid-template-columns:48px 1fr auto;gap:8px;padding:10px 12px;align-items:center}
-    .list .head{background:#12151a;color:var(--muted);font-size:12px}
-    .list .item{border-top:1px solid #202736}
-    .pill{font-size:12px;border:1px solid #2a3342;border-radius:999px;padding:4px 8px;color:#c5d3e8;text-align:center}
-    .muted{color:var(--muted)}
-    .hr{height:1px;background:#202736;margin:14px 0}
-    .note{font-size:12px;color:var(--muted)}
-    .tag{font-size:11px;color:#a6b5cc}
-    .toast{position:fixed;right:12px;bottom:12px;background:#12161e;border:1px solid #2b3341;border-radius:12px;padding:10px 12px;max-width:360px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-    .toast.ok{border-color:var(--ok)}
-    .toast.warn{border-color:var(--warn)}
-    .toast.err{border-color:var(--err)}
-    code{background:#0b0e12;border:1px solid #1a2130;border-radius:8px;padding:0 6px}
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--txt);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif
+    }
+
+    a {
+      color: var(--acc);
+      text-decoration: none
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px
+    }
+
+    header {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin: 6px 0 16px
+    }
+
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px
+    }
+
+    .card {
+      background: var(--panel);
+      border-radius: var(--br);
+      padding: 16px;
+      margin: 12px 0;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, .25)
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px
+    }
+
+    @media(min-width:900px) {
+      .grid.cols-2 {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin: 10px 0
+    }
+
+    .tab-btn {
+      background: #12151b;
+      border: 1px solid #222630;
+      color: var(--muted);
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer
+    }
+
+    .tab-btn.active {
+      border-color: var(--acc);
+      color: var(--txt)
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 10px;
+      background: #0e1116;
+      border: 1px solid #20242e;
+      border-radius: 10px;
+      color: var(--txt)
+    }
+
+    .hl {
+      color: var(--acc)
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid #273041;
+      background: #11151b;
+      color: var(--txt);
+      cursor: pointer
+    }
+
+    .btn:hover {
+      border-color: #3a475a
+    }
+
+    .btn-acc {
+      border-color: var(--acc);
+      color: #fff
+    }
+
+    .btn-ok {
+      border-color: var(--ok);
+      color: #fff
+    }
+
+    .btn-warn {
+      border-color: var(--warn);
+      color: #fff
+    }
+
+    .btn-err {
+      border-color: var(--err);
+      color: #fff
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap
+    }
+
+    .list {
+      border: 1px solid #232a35;
+      border-radius: 12px;
+      overflow: hidden
+    }
+
+    .list .head,
+    .list .item {
+      display: grid;
+      grid-template-columns: 48px 1fr auto;
+      gap: 8px;
+      padding: 10px 12px;
+      align-items: center
+    }
+
+    .list .head {
+      background: #12151a;
+      color: var(--muted);
+      font-size: 12px
+    }
+
+    .list .item {
+      border-top: 1px solid #202736
+    }
+
+    .pill {
+      font-size: 12px;
+      border: 1px solid #2a3342;
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: #c5d3e8;
+      text-align: center
+    }
+
+    .muted {
+      color: var(--muted)
+    }
+
+    .hr {
+      height: 1px;
+      background: #202736;
+      margin: 14px 0
+    }
+
+    .note {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .tag {
+      font-size: 11px;
+      color: #a6b5cc
+    }
+
+    .toast {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      background: #12161e;
+      border: 1px solid #2b3341;
+      border-radius: 12px;
+      padding: 10px 12px;
+      max-width: 360px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .35)
+    }
+
+    .toast.ok {
+      border-color: var(--ok)
+    }
+
+    .toast.warn {
+      border-color: var(--warn)
+    }
+
+    .toast.err {
+      border-color: var(--err)
+    }
+
+    code {
+      background: #0b0e12;
+      border: 1px solid #1a2130;
+      border-radius: 8px;
+      padding: 0 6px
+    }
 
     /* Mini-Tabellen (für Steps / Groups / Lights) */
-    .tbl{width:100%;border:1px solid #232a35;border-radius:10px;overflow:hidden;margin-top:8px}
-    .tbl-row,.tbl-head{display:grid;gap:8px;align-items:center}
-    .tbl-head{background:#12151a;color:var(--muted);font-size:12px}
-    .tbl-row{border-top:1px solid #202736}
-    .tbl-cell{padding:8px 10px}
-    .tbl-head .tbl-cell{padding:10px 10px}
-    .tbl-steps{grid-template-columns: 140px 160px 140px 80px}
-    .tbl-groups{grid-template-columns: 1fr 160px 100px}
-    .tbl-lights{grid-template-columns: 90px 100px minmax(160px,1fr) 150px 110px 110px 80px}
-    .tbl input,.tbl select{width:100%}
+    .tbl {
+      width: 100%;
+      border: 1px solid #232a35;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 8px
+    }
+
+    .tbl-row,
+    .tbl-head {
+      display: grid;
+      gap: 8px;
+      align-items: center
+    }
+
+    .tbl-head {
+      background: #12151a;
+      color: var(--muted);
+      font-size: 12px
+    }
+
+    .tbl-row {
+      border-top: 1px solid #202736
+    }
+
+    .tbl-cell {
+      padding: 8px 10px
+    }
+
+    .tbl-head .tbl-cell {
+      padding: 10px 10px
+    }
+
+    .tbl-steps {
+      grid-template-columns: 140px 160px 140px 80px
+    }
+
+    .tbl-groups {
+      grid-template-columns: 1fr 160px 100px
+    }
+
+    .tbl-lights {
+      grid-template-columns: 90px 100px minmax(160px, 1fr) 150px 110px 110px 80px
+    }
+
+    .tbl input,
+    .tbl select {
+      width: 100%
+    }
   </style>
 </head>
+
 <body>
   <div class="wrap">
     <header>
@@ -90,7 +333,8 @@
             <button class="btn btn-warn" id="btn-reload">GUI neu laden</button>
           </div>
           <p class="note" style="margin-top:10px">
-            Captive-Portal aktiv im AP-Modus. Im STA-Modus ist die Seite auch über <code>http://&lt;hostname&gt;.local</code> erreichbar.
+            Captive-Portal aktiv im AP-Modus. Im STA-Modus ist die Seite auch über
+            <code>http://&lt;hostname&gt;.local</code> erreichbar.
           </p>
         </div>
         <div>
@@ -175,7 +419,9 @@
 
       <div id="pat-list" class="list" style="margin-top:10px">
         <div class="head">
-          <div>#</div><div>Name & Schritte</div><div>Aktion</div>
+          <div>#</div>
+          <div>Name & Schritte</div>
+          <div>Aktion</div>
         </div>
         <!-- items per JS -->
       </div>
@@ -208,7 +454,9 @@
 
       <div id="grp-list" class="list" style="margin-top:10px">
         <div class="head">
-          <div>ID</div><div>Name / Status</div><div>Aktion</div>
+          <div>ID</div>
+          <div>Name / Status</div>
+          <div>Aktion</div>
         </div>
         <!-- items per JS -->
       </div>
@@ -218,7 +466,8 @@
         <strong>Spalten-Erklärung (Gruppen):</strong>
         <ul>
           <li><b>ID</b>: Eindeutige Gruppennummer (frei wählbar).</li>
-          <li><b>Name</b> / <b>enabled</b>: Anzeigename; „enabled“ an/aus schaltet die gesamte Gruppe (Zeit wird eingefroren).</li>
+          <li><b>Name</b> / <b>enabled</b>: Anzeigename; „enabled“ an/aus schaltet die gesamte Gruppe (Zeit wird
+            eingefroren).</li>
           <li><b>Aktion</b>: Gruppe löschen.</li>
         </ul>
       </div>
@@ -233,7 +482,7 @@
           <input id="l-ch" type="number" placeholder="LEDC ch" style="width:120px" />
           <select id="l-pidx" style="min-width:160px"></select>
           <input id="l-rest" type="number" placeholder="Rest ms (-1=Pat)" style="width:150px" />
-          <input id="l-gid"  type="number" placeholder="Gruppe" style="width:120px" />
+          <input id="l-gid" type="number" placeholder="Gruppe" style="width:120px" />
           <input id="l-phase" type="number" placeholder="Phase ms" style="width:130px" />
           <button class="btn btn-acc" id="btn-light-add">＋ Ausgang</button>
           <button class="btn" id="btn-light-save">💾 Speichern</button>
@@ -243,7 +492,9 @@
 
       <div id="light-list" class="list" style="margin-top:10px">
         <div class="head">
-          <div>#</div><div>Konfiguration</div><div>Aktion</div>
+          <div>#</div>
+          <div>Konfiguration</div>
+          <div>Aktion</div>
         </div>
         <!-- items per JS -->
       </div>
@@ -255,7 +506,8 @@
           <li><b>GPIO</b>: Pin-Nummer am ESP32.</li>
           <li><b>LEDC ch</b>: PWM-Kanal (0–15); jeder Ausgang braucht einen eigenen Kanal.</li>
           <li><b>Pattern</b>: Verknüpftes Blinkmuster.</li>
-          <li><b>Rest ms (-1=Pat)</b>: Dauer des letzten Schritts (Pause). <code>-1</code> = Pause aus Pattern übernehmen.</li>
+          <li><b>Rest ms (-1=Pat)</b>: Dauer des letzten Schritts (Pause). <code>-1</code> = Pause aus Pattern
+            übernehmen.</li>
           <li><b>Gruppe</b>: Gruppennummer; Gruppen können komplett an/aus geschaltet werden.</li>
           <li><b>Phase ms</b>: Zeitverschiebung innerhalb eines Pattern-Zyklus (für versetztes Blinken).</li>
           <li><b>Aktion</b>: Ausgang löschen.</li>
@@ -275,13 +527,13 @@
       if (txt !== undefined) n.textContent = txt;
       return n;
     };
-    const cell = (child) => { const c = el("div","tbl-cell"); c.appendChild(child); return c; };
-    const toast = (msg, kind="") => {
+    const cell = (child) => { const c = el("div", "tbl-cell"); c.appendChild(child); return c; };
+    const toast = (msg, kind = "") => {
       const t = $("#toast");
-      t.className = "toast" + (kind?(" "+kind):"");
+      t.className = "toast" + (kind ? (" " + kind) : "");
       t.innerHTML = msg;
       t.style.display = "block";
-      setTimeout(()=>t.style.display="none", 3000);
+      setTimeout(() => t.style.display = "none", 3000);
     };
 
     // --- API compatibility detection ---
@@ -289,11 +541,11 @@
     let hasApplyConfig = false;
     let hasApplyWifi = false;
 
-    async function detectApis(){
+    async function detectApis() {
       const tests = [
-        fetch("/api/wifi", {method:"OPTIONS"}).then(r=>{ if (r.ok) hasWifiAPI = true; }).catch(()=>{}),
-        fetch("/api/config/apply", {method:"OPTIONS"}).then(r=>{ if (r.ok) hasApplyConfig = true; }).catch(()=>{}),
-        fetch("/api/wifi/apply", {method:"OPTIONS"}).then(r=>{ if (r.ok) hasApplyWifi = true; }).catch(()=>{}),
+        fetch("/api/wifi", { method: "OPTIONS" }).then(r => { if (r.ok) hasWifiAPI = true; }).catch(() => { }),
+        fetch("/api/config/apply", { method: "OPTIONS" }).then(r => { if (r.ok) hasApplyConfig = true; }).catch(() => { }),
+        fetch("/api/wifi/apply", { method: "OPTIONS" }).then(r => { if (r.ok) hasApplyWifi = true; }).catch(() => { }),
       ];
       await Promise.all(tests);
       const compat = $("#compat");
@@ -309,22 +561,22 @@
 
     // --- State ---
     const state = {
-      wifi: {enabled:true, mode:"ap", ap:{ssid:"",password:""}, sta:{ssid:"",password:""}},
+      wifi: { enabled: true, mode: "ap", ap: { ssid: "", password: "" }, sta: { ssid: "", password: "" } },
       patterns: [],
       groups: [],
       lights: []
     };
 
     // --- Fetch + Render ---
-    async function loadAll(){
+    async function loadAll() {
       const r = await fetch("/api/config");
-      if (!r.ok){ toast("Konnte /api/config nicht laden","err"); return; }
+      if (!r.ok) { toast("Konnte /api/config nicht laden", "err"); return; }
       const cfg = await r.json();
 
       state.patterns = cfg.patterns || [];
-      state.groups   = cfg.groups   || [];
-      state.lights   = cfg.lights   || [];
-      state.wifi     = cfg.wifi     || state.wifi;
+      state.groups = cfg.groups || [];
+      state.lights = cfg.lights || [];
+      state.wifi = cfg.wifi || state.wifi;
 
       $("#badge-mode").textContent = "Modus: " + (state.wifi?.mode || "ap").toUpperCase();
       $("#badge-ip").textContent = "IP: " + (location.hostname || "192.168.4.1");
@@ -337,9 +589,9 @@
       renderSysinfo();
     }
 
-    async function renderSysinfo(){
+    async function renderSysinfo() {
       const r = await fetch("/api/sysinfo");
-      if(!r.ok){ $("#sysinfo").textContent = "–"; return; }
+      if (!r.ok) { $("#sysinfo").textContent = "–"; return; }
       const s = await r.json();
       $("#sysinfo").innerHTML = `
         LEDC: ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle gesamt: ${s.max_ledc_channels}<br>
@@ -347,64 +599,64 @@
       `;
     }
 
-    function renderWifi(){
+    function renderWifi() {
       $("#wifi-enabled").value = String(!!state.wifi.enabled);
-      $("#wifi-mode").value    = state.wifi.mode || "ap";
-      $("#ap-ssid").value      = state.wifi.ap?.ssid || "";
-      $("#ap-pass").value      = state.wifi.ap?.password || "";
-      $("#sta-ssid").value     = state.wifi.sta?.ssid || "";
-      $("#sta-pass").value     = state.wifi.sta?.password || "";
+      $("#wifi-mode").value = state.wifi.mode || "ap";
+      $("#ap-ssid").value = state.wifi.ap?.ssid || "";
+      $("#ap-pass").value = state.wifi.ap?.password || "";
+      $("#sta-ssid").value = state.wifi.sta?.ssid || "";
+      $("#sta-pass").value = state.wifi.sta?.password || "";
 
       $("#wifi-warning").textContent =
         hasWifiAPI ? "" :
-        "Warnung: getrennte WLAN-Endpunkte nicht verfügbar – Speichern kann einen WLAN-Neustart auslösen.";
+          "Warnung: getrennte WLAN-Endpunkte nicht verfügbar – Speichern kann einen WLAN-Neustart auslösen.";
     }
 
-    function renderPatterns(){
+    function renderPatterns() {
       // dropdown for Lights
       const dd = $("#l-pidx"); dd.innerHTML = "";
-      state.patterns.forEach((p, i)=>{
-        const o = el("option","",`[${i}] ${p.name||"(ohne Namen)"}`);
+      state.patterns.forEach((p, i) => {
+        const o = el("option", "", `[${i}] ${p.name || "(ohne Namen)"}`);
         o.value = i; dd.appendChild(o);
       });
 
       const box = $("#pat-list");
-      box.querySelectorAll(".item").forEach(n=>n.remove());
+      box.querySelectorAll(".item").forEach(n => n.remove());
 
-      state.patterns.forEach((p, idx)=>{
+      state.patterns.forEach((p, idx) => {
         p.steps = Array.isArray(p.steps) ? p.steps : [];
-        const it = el("div","item");
-        it.appendChild(el("div","pill", idx));
+        const it = el("div", "item");
+        it.appendChild(el("div", "pill", idx));
 
         const body = el("div");
 
-        const name = el("input"); name.value = p.name||""; name.placeholder = "Pattern-Name";
-        name.addEventListener("input", ()=> p.name = name.value);
+        const name = el("input"); name.value = p.name || ""; name.placeholder = "Pattern-Name";
+        name.addEventListener("input", () => p.name = name.value);
         body.appendChild(name);
 
         // Steps „Tabelle“ mit Spaltenüberschriften
-        const table = el("div","tbl");
-        const head  = el("div","tbl-head tbl-steps");
+        const table = el("div", "tbl");
+        const head = el("div", "tbl-head tbl-steps");
         head.append(
-          el("div","tbl-cell","Dauer (ms)"),
-          el("div","tbl-cell","Level (0–255)"),
-          el("div","tbl-cell","Fade"),
-          el("div","tbl-cell","Aktion")
+          el("div", "tbl-cell", "Dauer (ms)"),
+          el("div", "tbl-cell", "Level (0–255)"),
+          el("div", "tbl-cell", "Fade"),
+          el("div", "tbl-cell", "Aktion")
         );
         table.appendChild(head);
 
-        p.steps.forEach((s, sidx)=>{
-          const row = el("div","tbl-row tbl-steps");
-          const d = el("input"); d.type="number"; d.placeholder="ms"; d.value = s.duration_ms ?? 0;
-          const l = el("input"); l.type="number"; l.placeholder="0..255"; l.min=0;l.max=255; l.value = s.level ?? 0;
-          const f = el("select"); f.innerHTML='<option value="false">false</option><option value="true">true</option>'; f.value=String(!!s.fade);
-          const delBtn = el("button","btn btn-err","✖");
+        p.steps.forEach((s, sidx) => {
+          const row = el("div", "tbl-row tbl-steps");
+          const d = el("input"); d.type = "number"; d.placeholder = "ms"; d.value = s.duration_ms ?? 0;
+          const l = el("input"); l.type = "number"; l.placeholder = "0..255"; l.min = 0; l.max = 255; l.value = s.level ?? 0;
+          const f = el("select"); f.innerHTML = '<option value="false">false</option><option value="true">true</option>'; f.value = String(!!s.fade);
+          const delBtn = el("button", "btn btn-err", "✖");
 
-          d.addEventListener("change", ()=> s.duration_ms = Number(d.value));
-          l.addEventListener("change", ()=> s.level       = Number(l.value));
-          f.addEventListener("change", ()=> s.fade        = (f.value==="true"));
-          delBtn.addEventListener("click", ()=>{
-            p.steps.splice(sidx,1);
+          d.addEventListener("change", () => s.duration_ms = Number(d.value));
+          l.addEventListener("change", () => s.level = Number(l.value));
+          f.addEventListener("change", () => s.fade = (f.value === "true"));
+          delBtn.addEventListener("click", () => {
+            p.steps.splice(sidx, 1);
             renderPatterns();
           });
 
@@ -418,10 +670,10 @@
         });
 
         // add step
-        const addRow = el("div","row"); addRow.style.marginTop="8px";
-        const add = el("button","btn btn-acc","＋ Schritt");
-        add.addEventListener("click", ()=>{
-          p.steps.push({duration_ms:100, level:0, fade:false});
+        const addRow = el("div", "row"); addRow.style.marginTop = "8px";
+        const add = el("button", "btn btn-acc", "＋ Schritt");
+        add.addEventListener("click", () => {
+          p.steps.push({ duration_ms: 100, level: 0, fade: false });
           renderPatterns();
         });
         addRow.appendChild(add);
@@ -429,10 +681,10 @@
         body.append(table, addRow);
         it.appendChild(body);
 
-        const actions = el("div","row");
-        const rm = el("button","btn btn-err","Pattern löschen");
-        rm.addEventListener("click", ()=>{
-          state.patterns.splice(idx,1);
+        const actions = el("div", "row");
+        const rm = el("button", "btn btn-err", "Pattern löschen");
+        rm.addEventListener("click", () => {
+          state.patterns.splice(idx, 1);
           renderPatterns();
         });
         actions.appendChild(rm);
@@ -442,36 +694,36 @@
       });
     }
 
-    function renderGroups(){
+    function renderGroups() {
       const box = $("#grp-list");
-      box.querySelectorAll(".item").forEach(n=>n.remove());
-      state.groups.forEach((g, i)=>{
-        const it = el("div","item");
-        it.appendChild(el("div","pill", g.id));
+      box.querySelectorAll(".item").forEach(n => n.remove());
+      state.groups.forEach((g, i) => {
+        const it = el("div", "item");
+        it.appendChild(el("div", "pill", g.id));
 
         const body = el("div");
 
-        const table = el("div","tbl");
-        const head  = el("div","tbl-head tbl-groups");
+        const table = el("div", "tbl");
+        const head = el("div", "tbl-head tbl-groups");
         head.append(
-          el("div","tbl-cell","Name"),
-          el("div","tbl-cell","enabled"),
-          el("div","tbl-cell","Aktion")
+          el("div", "tbl-cell", "Name"),
+          el("div", "tbl-cell", "enabled"),
+          el("div", "tbl-cell", "Aktion")
         );
         table.appendChild(head);
 
-        const row = el("div","tbl-row tbl-groups");
-        const name = el("input"); name.value = g.name||""; name.placeholder="Gruppenname";
-        name.addEventListener("input", ()=> g.name = name.value);
+        const row = el("div", "tbl-row tbl-groups");
+        const name = el("input"); name.value = g.name || ""; name.placeholder = "Gruppenname";
+        name.addEventListener("input", () => g.name = name.value);
 
         const enSel = el("select");
-        enSel.innerHTML='<option value="true">true</option><option value="false">false</option>';
+        enSel.innerHTML = '<option value="true">true</option><option value="false">false</option>';
         enSel.value = String(!!g.enabled);
-        enSel.addEventListener("change", ()=> g.enabled = (enSel.value==="true"));
+        enSel.addEventListener("change", () => g.enabled = (enSel.value === "true"));
 
-        const delBtn = el("button","btn btn-err","✖");
-        delBtn.addEventListener("click", ()=>{
-          state.groups.splice(i,1); renderGroups();
+        const delBtn = el("button", "btn btn-err", "✖");
+        delBtn.addEventListener("click", () => {
+          state.groups.splice(i, 1); renderGroups();
         });
 
         row.append(
@@ -484,58 +736,58 @@
         body.appendChild(table);
         it.appendChild(body);
 
-        const actions = el("div","row"); // Platzhalter
+        const actions = el("div", "row"); // Platzhalter
         it.appendChild(actions);
 
         box.appendChild(it);
       });
     }
 
-    function renderLights(){
+    function renderLights() {
       const box = $("#light-list");
-      box.querySelectorAll(".item").forEach(n=>n.remove());
-      state.lights.forEach((L, i)=>{
-        const it = el("div","item");
-        it.appendChild(el("div","pill", i));
+      box.querySelectorAll(".item").forEach(n => n.remove());
+      state.lights.forEach((L, i) => {
+        const it = el("div", "item");
+        it.appendChild(el("div", "pill", i));
 
         const body = el("div");
 
-        const table = el("div","tbl");
-        const head  = el("div","tbl-head tbl-lights");
+        const table = el("div", "tbl");
+        const head = el("div", "tbl-head tbl-lights");
         head.append(
-          el("div","tbl-cell","GPIO"),
-          el("div","tbl-cell","LEDC ch"),
-          el("div","tbl-cell","Pattern"),
-          el("div","tbl-cell","Rest ms (-1=Pat)"),
-          el("div","tbl-cell","Gruppe"),
-          el("div","tbl-cell","Phase ms"),
-          el("div","tbl-cell","Aktion")
+          el("div", "tbl-cell", "GPIO"),
+          el("div", "tbl-cell", "LEDC ch"),
+          el("div", "tbl-cell", "Pattern"),
+          el("div", "tbl-cell", "Rest ms (-1=Pat)"),
+          el("div", "tbl-cell", "Gruppe"),
+          el("div", "tbl-cell", "Phase ms"),
+          el("div", "tbl-cell", "Aktion")
         );
         table.appendChild(head);
 
-        const row = el("div","tbl-row tbl-lights");
+        const row = el("div", "tbl-row tbl-lights");
 
-        const p  = el("input"); p.type="number"; p.placeholder="GPIO"; p.value=L.pin??21;
-        const ch = el("input"); ch.type="number"; ch.placeholder="Kanal"; ch.value=L.channel??0;
+        const p = el("input"); p.type = "number"; p.placeholder = "GPIO"; p.value = L.pin ?? 21;
+        const ch = el("input"); ch.type = "number"; ch.placeholder = "Kanal"; ch.value = L.channel ?? 0;
 
         const pidx = el("select");
         pidx.innerHTML = "";
-        state.patterns.forEach((pt, ix)=>{
-          const o = el("option","",`[${ix}] ${pt.name||"(ohne Namen)"}`); o.value=ix; pidx.appendChild(o);
+        state.patterns.forEach((pt, ix) => {
+          const o = el("option", "", `[${ix}] ${pt.name || "(ohne Namen)"}`); o.value = ix; pidx.appendChild(o);
         });
-        pidx.value = L.patternIndex??0;
+        pidx.value = L.patternIndex ?? 0;
 
-        const rest = el("input"); rest.type="number"; rest.placeholder="-1 oder ms"; rest.value = L.restOverrideMs ?? -1;
-        const gid  = el("input"); gid.type="number"; gid.placeholder="Gruppe"; gid.value = L.groupId ?? 0;
-        const ph   = el("input"); ph.type="number"; ph.placeholder="ms"; ph.value = L.phase_ms ?? 0;
+        const rest = el("input"); rest.type = "number"; rest.placeholder = "-1 oder ms"; rest.value = L.restOverrideMs ?? -1;
+        const gid = el("input"); gid.type = "number"; gid.placeholder = "Gruppe"; gid.value = L.groupId ?? 0;
+        const ph = el("input"); ph.type = "number"; ph.placeholder = "ms"; ph.value = L.phase_ms ?? 0;
 
-        [p,ch,pidx,rest,gid,ph].forEach(inp=>inp.addEventListener("change", ()=>{
-          L.pin=Number(p.value); L.channel=Number(ch.value); L.patternIndex=Number(pidx.value);
-          L.restOverrideMs=Number(rest.value); L.groupId=Number(gid.value); L.phase_ms=Number(ph.value);
+        [p, ch, pidx, rest, gid, ph].forEach(inp => inp.addEventListener("change", () => {
+          L.pin = Number(p.value); L.channel = Number(ch.value); L.patternIndex = Number(pidx.value);
+          L.restOverrideMs = Number(rest.value); L.groupId = Number(gid.value); L.phase_ms = Number(ph.value);
         }));
 
-        const delBtn = el("button","btn btn-err","✖");
-        delBtn.addEventListener("click", ()=>{ state.lights.splice(i,1); renderLights(); });
+        const delBtn = el("button", "btn btn-err", "✖");
+        delBtn.addEventListener("click", () => { state.lights.splice(i, 1); renderLights(); });
 
         row.append(
           cell(p),
@@ -551,7 +803,7 @@
         body.appendChild(table);
         it.appendChild(body);
 
-        const actions = el("div","row"); // Platzhalter
+        const actions = el("div", "row"); // Platzhalter
         it.appendChild(actions);
 
         box.appendChild(it);
@@ -559,143 +811,146 @@
     }
 
     // --- Collectors ---
-    function collectConfigOnly(){
+    function collectConfigOnly() {
       return {
         wifi: state.wifi, // Backend kann sie ignorieren, wenn getrennte Endpunkte
-        patterns: (state.patterns||[]).map(p=>({name:p.name||"", steps:(p.steps||[]).map(s=>({
-          duration_ms:Number(s.duration_ms||0),
-          level:Number(s.level||0),
-          fade:!!s.fade
-        }))})),
-        groups: (state.groups||[]).map(g=>({id:Number(g.id), name:g.name||"", enabled:!!g.enabled})),
-        lights: (state.lights||[]).map(L=>({
-          pin:Number(L.pin), channel:Number(L.channel), patternIndex:Number(L.patternIndex),
-          restOverrideMs:Number(L.restOverrideMs), groupId:Number(L.groupId), phase_ms:Number(L.phase_ms)
+        patterns: (state.patterns || []).map(p => ({
+          name: p.name || "", steps: (p.steps || []).map(s => ({
+            duration_ms: Number(s.duration_ms || 0),
+            level: Number(s.level || 0),
+            fade: !!s.fade
+          }))
+        })),
+        groups: (state.groups || []).map(g => ({ id: Number(g.id), name: g.name || "", enabled: !!g.enabled })),
+        lights: (state.lights || []).map(L => ({
+          pin: Number(L.pin), channel: Number(L.channel), patternIndex: Number(L.patternIndex),
+          restOverrideMs: Number(L.restOverrideMs), groupId: Number(L.groupId), phase_ms: Number(L.phase_ms)
         }))
       };
     }
-    function collectWifiOnly(){
+    function collectWifiOnly() {
       const w = state.wifi || {};
       return {
-        enabled: (String(w.enabled)!=="false"),
-        mode: (w.mode||"ap").toLowerCase(),
-        ap: {ssid: w.ap?.ssid || "", password: w.ap?.password || ""},
-        sta:{ssid: w.sta?.ssid|| "", password: w.sta?.password|| ""}
+        enabled: (String(w.enabled) !== "false"),
+        mode: (w.mode || "ap").toLowerCase(),
+        ap: { ssid: w.ap?.ssid || "", password: w.ap?.password || "" },
+        sta: { ssid: w.sta?.ssid || "", password: w.sta?.password || "" }
       };
     }
 
     // --- Actions: Save/Apply ---
-    async function saveConfigOnly(){
+    async function saveConfigOnly() {
       const payload = collectConfigOnly();
-      const r = await fetch("/api/config", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
-      if (!r.ok){ toast("Speichern fehlgeschlagen (Config)","err"); return false; }
-      toast("Gespeichert (Config)","ok"); return true;
+      const r = await fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!r.ok) { toast("Speichern fehlgeschlagen (Config)", "err"); return false; }
+      toast("Gespeichert (Config)", "ok"); return true;
     }
-    async function applyConfigOnly(){
-      if (hasApplyConfig){
-        const r = await fetch("/api/config/apply",{method:"POST"});
-        if (!r.ok){ toast("Anwenden (LEDs) fehlgeschlagen","err"); return; }
-        toast("LED-Konfiguration angewendet","ok");
+    async function applyConfigOnly() {
+      if (hasApplyConfig) {
+        const r = await fetch("/api/config/apply", { method: "POST" });
+        if (!r.ok) { toast("Anwenden (LEDs) fehlgeschlagen", "err"); return; }
+        toast("LED-Konfiguration angewendet", "ok");
       } else {
         await saveConfigOnly();
-        toast("Angewendet via Fallback (PUT /api/config)","warn");
+        toast("Angewendet via Fallback (PUT /api/config)", "warn");
       }
     }
 
-    async function saveWifiOnly(){
-      if (hasWifiAPI){
-        const r = await fetch("/api/wifi", {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(collectWifiOnly())});
-        if (!r.ok){ toast("Speichern fehlgeschlagen (WLAN)","err"); return false; }
-        toast("Gespeichert (WLAN)","ok"); return true;
+    async function saveWifiOnly() {
+      if (hasWifiAPI) {
+        const r = await fetch("/api/wifi", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collectWifiOnly()) });
+        if (!r.ok) { toast("Speichern fehlgeschlagen (WLAN)", "err"); return false; }
+        toast("Gespeichert (WLAN)", "ok"); return true;
       } else {
         const cfg = collectConfigOnly();
         cfg.wifi = collectWifiOnly();
-        const r = await fetch("/api/config",{method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(cfg)});
-        if (!r.ok){ toast("Speichern fehlgeschlagen (Fallback /api/config)","err"); return false; }
-        toast("Gespeichert (Fallback) – WLAN könnte neu starten","warn"); return true;
+        const r = await fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) });
+        if (!r.ok) { toast("Speichern fehlgeschlagen (Fallback /api/config)", "err"); return false; }
+        toast("Gespeichert (Fallback) – WLAN könnte neu starten", "warn"); return true;
       }
     }
-    async function applyWifiOnly(){
-      if (hasApplyWifi){
-        const r = await fetch("/api/wifi/apply",{method:"POST"});
-        if (!r.ok){ toast("Anwenden (WLAN) fehlgeschlagen","err"); return; }
-        toast("WLAN angewendet (AP/STA). Verbindung kann wechseln.","ok");
+    async function applyWifiOnly() {
+      if (hasApplyWifi) {
+        const r = await fetch("/api/wifi/apply", { method: "POST" });
+        if (!r.ok) { toast("Anwenden (WLAN) fehlgeschlagen", "err"); return; }
+        toast("WLAN angewendet (AP/STA). Verbindung kann wechseln.", "ok");
       } else {
         await saveWifiOnly();
-        toast("WLAN angewendet via Fallback. Verbindung kann wechseln.","warn");
+        toast("WLAN angewendet via Fallback. Verbindung kann wechseln.", "warn");
       }
     }
 
     // --- Tab switching ---
-    document.querySelectorAll(".tab-btn").forEach(b=>{
-      b.addEventListener("click", ()=>{
-        document.querySelectorAll(".tab-btn").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".tab-btn").forEach(b => {
+      b.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(x => x.classList.remove("active"));
         b.classList.add("active");
         const tab = b.dataset.tab;
-        ["status","wifi","patterns","groups","lights"].forEach(id=>{
-          $("#tab-"+id).style.display = (id===tab) ? "" : "none";
+        ["status", "wifi", "patterns", "groups", "lights"].forEach(id => {
+          $("#tab-" + id).style.display = (id === tab) ? "" : "none";
         });
       });
     });
 
     // --- Wire buttons ---
     $("#btn-refresh").addEventListener("click", loadAll);
-    $("#btn-reload").addEventListener("click", ()=>location.reload());
+    $("#btn-reload").addEventListener("click", () => location.reload());
 
     // WIFI controls -> keep state updated
-    $("#wifi-enabled").addEventListener("change", e=> state.wifi.enabled = (e.target.value==="true"));
-    $("#wifi-mode").addEventListener("change", e=> state.wifi.mode = e.target.value);
-    $("#ap-ssid").addEventListener("input", e=> { state.wifi.ap = state.wifi.ap||{}; state.wifi.ap.ssid = e.target.value; });
-    $("#ap-pass").addEventListener("input", e=> { state.wifi.ap = state.wifi.ap||{}; state.wifi.ap.password = e.target.value; });
-    $("#sta-ssid").addEventListener("input", e=> { state.wifi.sta = state.wifi.sta||{}; state.wifi.sta.ssid = e.target.value; });
-    $("#sta-pass").addEventListener("input", e=> { state.wifi.sta = state.wifi.sta||{}; state.wifi.sta.password = e.target.value; });
+    $("#wifi-enabled").addEventListener("change", e => state.wifi.enabled = (e.target.value === "true"));
+    $("#wifi-mode").addEventListener("change", e => state.wifi.mode = e.target.value);
+    $("#ap-ssid").addEventListener("input", e => { state.wifi.ap = state.wifi.ap || {}; state.wifi.ap.ssid = e.target.value; });
+    $("#ap-pass").addEventListener("input", e => { state.wifi.ap = state.wifi.ap || {}; state.wifi.ap.password = e.target.value; });
+    $("#sta-ssid").addEventListener("input", e => { state.wifi.sta = state.wifi.sta || {}; state.wifi.sta.ssid = e.target.value; });
+    $("#sta-pass").addEventListener("input", e => { state.wifi.sta = state.wifi.sta || {}; state.wifi.sta.password = e.target.value; });
 
     $("#btn-wifi-save").addEventListener("click", saveWifiOnly);
     $("#btn-wifi-apply").addEventListener("click", applyWifiOnly);
 
     // Patterns toolbar
-    $("#btn-pat-add").addEventListener("click", ()=>{
+    $("#btn-pat-add").addEventListener("click", () => {
       const n = $("#pat-new-name").value.trim() || "Pattern";
-      state.patterns.push({name:n, steps:[]});
-      $("#pat-new-name").value="";
+      state.patterns.push({ name: n, steps: [] });
+      $("#pat-new-name").value = "";
       renderPatterns();
     });
     $("#btn-pat-save").addEventListener("click", saveConfigOnly);
     $("#btn-pat-apply").addEventListener("click", applyConfigOnly);
 
     // Groups toolbar
-    $("#btn-grp-add").addEventListener("click", ()=>{
-      const id = Number($("#grp-new-id").value||0);
-      const name = $("#grp-new-name").value.trim() || ("Gruppe "+id);
-      state.groups.push({id, name, enabled:true});
-      $("#grp-new-id").value=""; $("#grp-new-name").value="";
+    $("#btn-grp-add").addEventListener("click", () => {
+      const id = Number($("#grp-new-id").value || 0);
+      const name = $("#grp-new-name").value.trim() || ("Gruppe " + id);
+      state.groups.push({ id, name, enabled: true });
+      $("#grp-new-id").value = ""; $("#grp-new-name").value = "";
       renderGroups();
     });
     $("#btn-grp-save").addEventListener("click", saveConfigOnly);
     $("#btn-grp-apply").addEventListener("click", applyConfigOnly);
 
     // Lights toolbar
-    $("#btn-light-add").addEventListener("click", ()=>{
+    $("#btn-light-add").addEventListener("click", () => {
       const L = {
-        pin:Number($("#l-pin").value||21),
-        channel:Number($("#l-ch").value||0),
-        patternIndex:Number($("#l-pidx").value||0),
-        restOverrideMs:Number($("#l-rest").value||-1),
-        groupId:Number($("#l-gid").value||0),
-        phase_ms:Number($("#l-phase").value||0),
+        pin: Number($("#l-pin").value || 21),
+        channel: Number($("#l-ch").value || 0),
+        patternIndex: Number($("#l-pidx").value || 0),
+        restOverrideMs: Number($("#l-rest").value || -1),
+        groupId: Number($("#l-gid").value || 0),
+        phase_ms: Number($("#l-phase").value || 0),
       };
       state.lights.push(L);
-      $("#l-pin").value=$("#l-ch").value=$("#l-rest").value=$("#l-gid").value=$("#l-phase").value="";
+      $("#l-pin").value = $("#l-ch").value = $("#l-rest").value = $("#l-gid").value = $("#l-phase").value = "";
       renderLights();
     });
     $("#btn-light-save").addEventListener("click", saveConfigOnly);
     $("#btn-light-apply").addEventListener("click", applyConfigOnly);
 
     // Init
-    (async ()=>{
+    (async () => {
       await detectApis();
       await loadAll();
     })();
   </script>
 </body>
+
 </html>
