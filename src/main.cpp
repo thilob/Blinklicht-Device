@@ -7,6 +7,8 @@
 #include <FS.h>
 #include <esp_bt.h>
 #include <ESPmDNS.h>
+#include <soc/rtc_cntl_reg.h>
+#include <soc/soc.h>
 #include "board_config.h"  // Board-spezifische Pin-Konfiguration
 
 /* =========================================================================
@@ -88,6 +90,8 @@ static bool serverRunning = false;
 static DNSServer dnsServer;
 // Flag für verzögerten WiFi-Neustart (Race Condition vermeiden)
 static volatile bool wifiRestartPending = false;
+// Flag für Setup-Phase (verhindert vorzeitige Player-Updates)
+static bool systemReady = false;
 
 /// -------------------- Helpers --------------------
 static bool isGroupEnabled(int gid) {
@@ -392,20 +396,33 @@ static void makeDefaultConfig() {
   }
 }
 
-/// Hardware anwenden (LEDC setup/attach) + Player binden & (re)starten
-static void applyHardware() {
+/// Hardware Setup (nur LEDC, keine Player-Initialisierung)
+static void setupHardware() {
+  Serial.println("Initialisiere LEDs schrittweise (Brownout-Schutz)...");
   for (const auto &L : lights) {
     if (L.channel >= MAX_LEDC_CHANNELS) continue;
     ledcSetup(L.channel, LEDC_FREQ_HZ, LEDC_RES_BITS);
     ledcAttachPin(L.pin, L.channel);
     ledcWrite(L.channel, 0);
+    delay(10);  // Brownout-Schutz: Stromspitzen vermeiden
   }
+  Serial.println("LEDs initialisiert.");
+}
+
+/// Player binden & starten (getrennt von Hardware-Setup)
+static void startPlayers() {
   size_t n = min<size_t>(8, lights.size());
   for (size_t i = 0; i < n; ++i) {
     players[i].attach(lights[i].channel);
     players[i].bind((int)i);
     players[i].begin();
   }
+}
+
+/// Hardware anwenden (LEDC setup/attach) + Player binden & (re)starten
+static void applyHardware() {
+  setupHardware();
+  startPlayers();
 }
 
 /// -------------------- Static Files --------------------
@@ -744,6 +761,7 @@ void startWiFi() {
     WiFi.config((uint32_t)0U, (uint32_t)0U, (uint32_t)0U);
 
     WiFi.setHostname(hostName.c_str());
+    WiFi.setTxPower(WIFI_POWER_8_5dBm); // Brownout-Schutz: TX Power begrenzen
     Serial.printf("STA connecting to SSID='%s' ...\n", staSsidCfg.c_str());
     WiFi.begin(staSsidCfg.c_str(), staPassCfg.c_str());
 
@@ -773,9 +791,9 @@ void startWiFi() {
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(AP_IP, AP_GW, AP_MASK);
     String ssid = apSsidCfg.length()?apSsidCfg:makeDefaultApSsid();
+    WiFi.setSleep(true);  // Vor softAP() setzen
+    WiFi.setTxPower(WIFI_POWER_5dBm); // Brownout-Schutz: moderater TX-Pegel
     bool apok = WiFi.softAP(ssid.c_str(), apPassCfg.c_str()); // pass darf leer sein
-    WiFi.setSleep(true);
-    WiFi.setTxPower(WIFI_POWER_5dBm); // moderater TX-Pegel
     Serial.printf("AP gestartet: %s (%s), ok=%d\n", WiFi.SSID().c_str(), WiFi.softAPIP().toString().c_str(), apok);
     // Captive-DNS: alle Hostnamen -> AP-IP auflösen
     dnsServer.start(53, "*", AP_IP);
@@ -1038,12 +1056,17 @@ static void cliPoll() {
 
 /// -------------------- Setup & Loop --------------------
 void setup() {
+  // Brownout-Detektor deaktivieren (bei instabiler Stromversorgung)
+  // ACHTUNG: Nur wenn Stromversorgung grenzwertig ist
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  
   if (GAMMA_CORRECTION) buildGammaTable();
 
   Serial.begin(115200);
   delay(200);
   setCpuFrequencyMhz(80); // Brownout-freundlich
   btStop();               // Bluetooth aus
+  delay(100);             // Bluetooth-Stop abwarten
 
   Serial.println("\n========================================");
   Serial.println("Blaulicht-Controller (Multi-Board)");
@@ -1062,15 +1085,25 @@ void setup() {
     saveConfig();
   }
 
-  applyHardware();
+  // Nur Hardware (LEDC) initialisieren, Player noch nicht starten
+  setupHardware();
   
-  delay(100);  // LEDs initialisieren lassen
+  delay(200);  // Brownout-Schutz: Stromversorgung stabilisieren lassen
 
-  if (wifiEnabled) startWiFi();
+  if (wifiEnabled) {
+    Serial.println("Starte WiFi (Brownout-kritisch)...");
+    startWiFi();
+  }
   else {
     WiFi.mode(WIFI_OFF);
     Serial.println("WLAN ist laut config.json deaktiviert (wifi_enabled=false).");
   }
+
+  // Player erst NACH WiFi-Init starten, damit millis()-Zeitbasis korrekt ist
+  startPlayers();
+
+  // System ist jetzt vollständig initialisiert
+  systemReady = true;
 
   Serial.println("\nCLI bereit. 'help' eingeben.");
   Serial.print("> ");
@@ -1080,11 +1113,13 @@ void loop() {
   // WiFi-Neustart außerhalb von HTTP-Handler-Kontext
   if (wifiRestartPending) {
     wifiRestartPending = false;
+    systemReady = false;  // Player während WiFi-Restart pausieren
     Serial.println("[WiFi] Restarting WiFi/Server...");
     delay(250);  // Letzte Responses aussenden
     stopWiFi();  // Erst stoppen
     delay(250);  // Stop abwarten
     if (wifiEnabled) startWiFi();
+    systemReady = true;   // System wieder bereit
     return;  // Diesen Loop-Durchlauf beenden, kein handleClient() mehr
   }
 
@@ -1093,8 +1128,10 @@ void loop() {
     server.handleClient();
   }
 
-  size_t n = min<size_t>(8, lights.size());
-  for (size_t i = 0; i < n; ++i) players[i].update();
+  if (systemReady) {
+    size_t n = min<size_t>(8, lights.size());
+    for (size_t i = 0; i < n; ++i) players[i].update();
+  }
 
   cliPoll();
 }
