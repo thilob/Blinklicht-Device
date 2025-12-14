@@ -666,10 +666,13 @@ static void startServerRoutes() {
 
   server.on("/api/sysinfo", HTTP_GET, [](){
     JsonDocument doc;
+    doc["board_name"]        = BOARD_NAME;
+    doc["max_led_outputs"]   = NUM_LED_OUTPUTS;
     doc["max_ledc_channels"] = MAX_LEDC_CHANNELS;
     doc["ledc_freq_hz"]      = LEDC_FREQ_HZ;
     doc["ledc_res_bits"]     = LEDC_RES_BITS;
     doc["num_lights"]        = (uint32_t)lights.size();
+    doc["reset_pin"]         = RESET_WIFI_PIN;
     String out; serializeJson(doc, out);
     sendJSON(out);
   });

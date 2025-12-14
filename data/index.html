@@ -307,9 +307,9 @@
   <div class="wrap">
     <header>
       <h1 style="margin:0">🚨 Blaulicht-Controller</h1>
+      <span id="badge-board" class="badge" style="background:#2a3f5f">Board: ?</span>
       <span id="badge-mode" class="badge">Lade…</span>
       <span id="badge-ip" class="badge">IP –</span>
-      <span id="badge-host" class="badge">Host –</span>
     </header>
 
     <!-- Tabs -->
@@ -578,9 +578,15 @@
       state.lights = cfg.lights || [];
       state.wifi = cfg.wifi || state.wifi;
 
+      // Lade Sysinfo für Board-Name
+      const sysR = await fetch("/api/sysinfo");
+      if (sysR.ok) {
+        const sys = await sysR.json();
+        $("#badge-board").textContent = `Board: ${sys.board_name || '?'} (${sys.num_lights}/${sys.max_led_outputs})`;
+      }
+
       $("#badge-mode").textContent = "Modus: " + (state.wifi?.mode || "ap").toUpperCase();
       $("#badge-ip").textContent = "IP: " + (location.hostname || "192.168.4.1");
-      $("#badge-host").textContent = "Host: " + (location.hostname || "—");
 
       renderWifi();
       renderPatterns();
@@ -594,8 +600,10 @@
       if (!r.ok) { $("#sysinfo").textContent = "–"; return; }
       const s = await r.json();
       $("#sysinfo").innerHTML = `
-        LEDC: ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle gesamt: ${s.max_ledc_channels}<br>
-        Ausgänge konfiguriert: ${s.num_lights}
+        <strong>Board:</strong> ${s.board_name || '?'} <span class="muted">(${s.max_led_outputs || '?'} LED-Ausgänge)</span><br>
+        <strong>LEDC:</strong> ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle: ${s.max_ledc_channels}<br>
+        <strong>Ausgänge konfiguriert:</strong> ${s.num_lights} von ${s.max_led_outputs} möglichen<br>
+        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || '?'}
       `;
     }
 
