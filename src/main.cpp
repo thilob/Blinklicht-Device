@@ -467,6 +467,7 @@ static bool handleCaptivePortalRedirect()
 /// -------------------- REST Endpoints --------------------
 // --- Vollständige Konfiguration lesen (für UI) ---
 static void handleGetConfig() {
+  if (wifiRestartPending) { server.send(503, "text/plain", "Server restarting"); return; }
   JsonDocument doc;
 
   // WLAN
@@ -517,6 +518,7 @@ static void handleGetConfig() {
 
 // --- NUR Logik speichern (keine WLAN-Änderung / kein WLAN-Restart) ---
 static void handlePutConfig() {
+  if (wifiRestartPending) { server.send(503, "text/plain", "Server restarting"); return; }
   if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
@@ -570,6 +572,7 @@ static void handlePutConfig() {
 
 // --- NUR WLAN lesen/schreiben ---
 static void handleGetWifi() {
+  if (wifiRestartPending) { server.send(503, "text/plain", "Server restarting"); return; }
   JsonDocument doc;
   JsonObject jw = doc["wifi"].to<JsonObject>();
   jw["enabled"] = wifiEnabled;
@@ -589,6 +592,7 @@ static void stopWiFi(); // fwd
 void   startWiFi();     // fwd
 
 static void handlePutWifi() {
+  if (wifiRestartPending) { server.send(503, "text/plain", "Server restarting"); return; }
   if (!server.hasArg("plain")) { addCORS(); server.send(400, "text/plain", "Missing body"); return; }
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
@@ -617,6 +621,8 @@ static void handlePutWifi() {
   addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (wifi saved, restarting...)":"ERROR (wifi save failed)");
 
   // WiFi-Neustart verzögert in loop() ausführen (Race Condition vermeiden)
+  // Setze serverRunning auf false um weitere handleClient() Aufrufe zu blockieren
+  serverRunning = false;
   wifiRestartPending = true;
 }
 
@@ -696,20 +702,24 @@ static void startServerRoutes() {
 }
 
 static void stopWiFi() {
+  // serverRunning wurde bereits in handlePutWifi auf false gesetzt
+  // oder wir setzen es hier nochmal zur Sicherheit
   if (serverRunning) {
-    server.stop();
     serverRunning = false;
-    delay(100);  // Server-Stop abwarten
+    delay(100);  // Keine weiteren Requests mehr annehmen
   }
+  
+  server.stop();
+  delay(200);  // Server-Stop abwarten
   
   // Nur stoppen wenn WiFi aktiv ist
   if (WiFi.getMode() != WIFI_OFF) {
     dnsServer.stop();
     MDNS.end();
-    delay(50);  // MDNS cleanup
+    delay(100);  // MDNS cleanup
     WiFi.softAPdisconnect(true);
     WiFi.disconnect(true, true);
-    delay(50);  // Disconnect abwarten
+    delay(100);  // Disconnect abwarten
     WiFi.mode(WIFI_OFF);
   }
   
@@ -888,24 +898,24 @@ static void handleCliLine(const String& line) {
 
   if (cmd=="wifi" && t.size()>=2) {
     String v=t[1]; v.toLowerCase();
-    if (v=="on")  { wifiEnabled=true;  saveConfig(); startWiFi(); Serial.println("WiFi ON."); }
-    else if (v=="off"){ wifiEnabled=false; saveConfig(); stopWiFi(); Serial.println("WiFi OFF."); }
+    if (v=="on")  { wifiEnabled=true;  saveConfig(); wifiRestartPending=true; Serial.println("WiFi ON (restarting...)"); }
+    else if (v=="off"){ wifiEnabled=false; saveConfig(); wifiRestartPending=true; Serial.println("WiFi OFF (stopping...)"); }
     else Serial.println("Usage: wifi on|off");
     return;
   }
   if (cmd=="mode" && t.size()>=2) {
     String m=t[1]; m.toLowerCase();
-    if (m=="ap"||m=="sta") { wifiModeCfg=m; saveConfig(); startWiFi(); Serial.println("OK"); }
+    if (m=="ap"||m=="sta") { wifiModeCfg=m; saveConfig(); wifiRestartPending=true; Serial.println("OK (restarting...)"); }
     else Serial.println("mode ap|sta");
     return;
   }
   if (cmd=="sta" && t.size()>=3) {
-    staSsidCfg=t[1]; staPassCfg=t[2]; saveConfig(); startWiFi(); Serial.println("OK");
+    staSsidCfg=t[1]; staPassCfg=t[2]; saveConfig(); wifiRestartPending=true; Serial.println("OK (restarting...)");
     return;
   }
   if (cmd=="ap" && t.size()>=2) {
     apSsidCfg=t[1]; apPassCfg = (t.size()>=3)?t[2]:"";
-    saveConfig(); startWiFi(); Serial.println("OK");
+    saveConfig(); wifiRestartPending=true; Serial.println("OK (restarting...)");
     return;
   }
   if (cmd=="dhcp") { cliDhcpRenew(); return; }
@@ -1071,10 +1081,11 @@ void loop() {
   if (wifiRestartPending) {
     wifiRestartPending = false;
     Serial.println("[WiFi] Restarting WiFi/Server...");
-    delay(100);  // Letzte Responses aussenden
+    delay(250);  // Letzte Responses aussenden
     stopWiFi();  // Erst stoppen
-    delay(100);  // Stop abwarten
+    delay(250);  // Stop abwarten
     if (wifiEnabled) startWiFi();
+    return;  // Diesen Loop-Durchlauf beenden, kein handleClient() mehr
   }
 
   if (serverRunning) {
