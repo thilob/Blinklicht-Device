@@ -7,10 +7,11 @@
 #include <FS.h>
 #include <esp_bt.h>
 #include <ESPmDNS.h>
+#include "board_config.h"  // Board-spezifische Pin-Konfiguration
 
 /* =========================================================================
-   Blaulicht-Controller (ESP32)
-   - 8 Ausgänge, PWM (LEDC) 5 kHz / 8-bit, nicht-blockierend
+   Blaulicht-Controller (Multi-Board ESP32)
+   - Flexible Ausgänge (board-abhängig), PWM (LEDC) 5 kHz / 8-bit, nicht-blockierend
    - Mehrere Patterns (letzter Step = Ruhepause), CRUD via Web-UI (AP/STA) ODER CLI
    - Lights: pin, channel, patternIndex, restOverrideMs, groupId, phase_ms
    - Gruppen an/aus (freeze der Zeit), Phasenverschiebung pro Ausgang
@@ -18,17 +19,13 @@
    - WLAN: AP (eindeutige SSID + Captive Portal) / STA (DHCP + mDNS Hostname)
    - JsonDocument-API (ArduinoJson v7)
    - NEU: /api/wifi (nur WLAN), /api/config (nur Logik) => getrenntes Anwenden
+   - Board-System: Pin-Konfiguration via board_config.h + platformio.ini
    ========================================================================= */
 
 /// -------------------- AP-/Netzwerk-Defaults --------------------
 static const IPAddress AP_IP  (192,168,4,1);
 static const IPAddress AP_GW  (192,168,4,1);
 static const IPAddress AP_MASK(255,255,255,0);
-
-/// -------------------- LEDC-Konfiguration --------------------
-constexpr uint32_t LEDC_FREQ_HZ     = 5000;
-constexpr uint8_t  LEDC_RES_BITS    = 8;      // Duty 0..255
-constexpr uint8_t  MAX_LEDC_CHANNELS= 16;     // ESP32
 
 /// -------------------- (Optionale) Gamma-Korrektur --------------------
 constexpr bool GAMMA_CORRECTION = false;
@@ -89,6 +86,8 @@ static WebServer server(80);
 static bool serverRunning = false;
 // Captive-DNS (nur im AP-Modus aktiv)
 static DNSServer dnsServer;
+// Flag für verzögerten WiFi-Neustart (Race Condition vermeiden)
+static volatile bool wifiRestartPending = false;
 
 /// -------------------- Helpers --------------------
 static bool isGroupEnabled(int gid) {
@@ -379,16 +378,18 @@ static void makeDefaultConfig() {
   groups.push_back({0,"Front",true});
   groups.push_back({1,"Heck", true});
 
-  lights = {
-    LightCfg{21,0,0,-1,   0,   0},
-    LightCfg{22,1,0,400,  0,  50},
-    LightCfg{18,2,1,250,  1, 100},
-    LightCfg{19,3,0,600,  1, 150},
-    LightCfg{23,4,0,300,  0, 200},
-    LightCfg{25,5,1,-1,   0, 250},
-    LightCfg{26,6,1,500,  1, 300},
-    LightCfg{27,7,0,200,  1, 350}
-  };
+  // Automatisch Lights basierend auf Board-Konfiguration erstellen
+  lights.clear();
+  for (int i = 0; i < NUM_LED_OUTPUTS; ++i) {
+    LightCfg L;
+    L.pin = LED_PINS[i];
+    L.channel = i;
+    L.patternIndex = (i % 2 == 0) ? 0 : 1;  // Abwechselnd Pattern 0 und 1
+    L.restOverrideMs = -1;
+    L.groupId = (i < NUM_LED_OUTPUTS / 2) ? 0 : 1;  // Vordere Hälfte = Front, Rest = Heck
+    L.phase_ms = i * 50;  // Phasenverschiebung
+    lights.push_back(L);
+  }
 }
 
 /// Hardware anwenden (LEDC setup/attach) + Player binden & (re)starten
@@ -613,16 +614,10 @@ static void handlePutWifi() {
   bool ok = saveConfig();
 
   // Antwort zuerst (damit Client kein Verbindungsreset sieht)
-  addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (wifi saved)":"ERROR (wifi save failed)");
+  addCORS(); server.send(ok?200:500, "text/plain", ok?"OK (wifi saved, restarting...)":"ERROR (wifi save failed)");
 
-  // Jetzt WLAN gemäß Config neu starten
-  delay(50);
-  if (wifiEnabled) {
-    stopWiFi();
-    startWiFi(); // erzwingt DHCP im STA-Modus
-  } else {
-    stopWiFi();
-  }
+  // WiFi-Neustart verzögert in loop() ausführen (Race Condition vermeiden)
+  wifiRestartPending = true;
 }
 
 /// -------------------- WIFI Start/Stop + Routen --------------------
@@ -701,12 +696,20 @@ static void stopWiFi() {
   if (serverRunning) {
     server.stop();
     serverRunning = false;
+    delay(100);  // Server-Stop abwarten
   }
-  WiFi.softAPdisconnect(true);
-  WiFi.disconnect(true, true);
-  WiFi.mode(WIFI_OFF);
-  dnsServer.stop();
-  MDNS.end();
+  
+  // Nur stoppen wenn WiFi aktiv ist
+  if (WiFi.getMode() != WIFI_OFF) {
+    dnsServer.stop();
+    MDNS.end();
+    delay(50);  // MDNS cleanup
+    WiFi.softAPdisconnect(true);
+    WiFi.disconnect(true, true);
+    delay(50);  // Disconnect abwarten
+    WiFi.mode(WIFI_OFF);
+  }
+  
   Serial.println("WLAN/Server gestoppt.");
 }
 
@@ -715,11 +718,13 @@ void startWiFi() {
   String base = apSsidCfg.length()?apSsidCfg:makeDefaultApSsid();
   hostName = base; hostName.replace(" ", "-"); sanitizeHostName(hostName);
 
-  if (!wifiEnabled) { stopWiFi(); return; }
+  if (!wifiEnabled) { 
+    WiFi.mode(WIFI_OFF);
+    return; 
+  }
 
   // STA-Modus?
   if (wifiModeCfg == "sta" && staSsidCfg.length()) {
-    stopWiFi();
     WiFi.mode(WIFI_STA);
 
     // DHCP erzwingen (setzt IP/GW/Subnet auf 0)
@@ -730,7 +735,10 @@ void startWiFi() {
     WiFi.begin(staSsidCfg.c_str(), staPassCfg.c_str());
 
     uint32_t t0=millis();
-    while (WiFi.status() != WL_CONNECTED && millis()-t0 < 15000) delay(100);
+    while (WiFi.status() != WL_CONNECTED && millis()-t0 < 15000) {
+      delay(100);
+      yield();  // Verhindert Watchdog-Reset
+    }
 
     if (WiFi.status() == WL_CONNECTED) {
       Serial.printf("STA connected: IP=%s  GW=%s  SN=%s  Host='%s.local'\n",
@@ -749,7 +757,6 @@ void startWiFi() {
 
   // AP-Modus (Fallback oder explizit)
   if (wifiModeCfg == "ap") {
-    stopWiFi();
     WiFi.mode(WIFI_AP);
     WiFi.softAPConfig(AP_IP, AP_GW, AP_MASK);
     String ssid = apSsidCfg.length()?apSsidCfg:makeDefaultApSsid();
@@ -1025,8 +1032,14 @@ void setup() {
   setCpuFrequencyMhz(80); // Brownout-freundlich
   btStop();               // Bluetooth aus
 
-  Serial.println("\nBlaulicht-Controller (Web/CLI + LittleFS)");
-  Serial.printf("LEDC-Kanaele gesamt: %u\n", MAX_LEDC_CHANNELS);
+  Serial.println("\n========================================");
+  Serial.println("Blaulicht-Controller (Multi-Board)");
+  Serial.println("========================================");
+  Serial.printf("Board:         %s\n", BOARD_NAME);
+  Serial.printf("LED Ausgänge:  %d\n", NUM_LED_OUTPUTS);
+  Serial.printf("LEDC Kanäle:   %u\n", MAX_LEDC_CHANNELS);
+  Serial.printf("Reset Pin:     GPIO %d\n", RESET_WIFI_PIN);
+  Serial.println("========================================");
 
   if (!LittleFS.begin(true)) Serial.println("LittleFS init fehlgeschlagen.");
 
@@ -1037,6 +1050,8 @@ void setup() {
   }
 
   applyHardware();
+  
+  delay(100);  // LEDs initialisieren lassen
 
   if (wifiEnabled) startWiFi();
   else {
@@ -1049,6 +1064,16 @@ void setup() {
 }
 
 void loop() {
+  // WiFi-Neustart außerhalb von HTTP-Handler-Kontext
+  if (wifiRestartPending) {
+    wifiRestartPending = false;
+    Serial.println("[WiFi] Restarting WiFi/Server...");
+    delay(100);  // Letzte Responses aussenden
+    stopWiFi();  // Erst stoppen
+    delay(100);  // Stop abwarten
+    if (wifiEnabled) startWiFi();
+  }
+
   if (serverRunning) {
     if (isAPModeActive()) dnsServer.processNextRequest(); // Captive DNS
     server.handleClient();
