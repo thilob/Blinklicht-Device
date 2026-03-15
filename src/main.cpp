@@ -5,7 +5,7 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <FS.h>
-#include <esp_bt.h>
+#include <esp32-hal-bt.h>
 #include <ESPmDNS.h>
 #include <soc/rtc_cntl_reg.h>
 #include <soc/soc.h>
