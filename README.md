@@ -18,8 +18,6 @@ Die Software läuft auf einem ESP32-DevKit und steuert bis zu **8 LEDs (Blaulich
 - **Captive Portal**: Im AP-Modus wird die Weboberfläche automatisch geöffnet  
 - **Brownout-Schutz**: externe Kondensatoren empfohlen (siehe unten)  
 
-> Hinweis: Dieses Projekt wurde unter Zuhilfenahme von **KI-Assistenz (ChatGPT)** erstellt.
-
 ---
 
 ## Hardware-Aufbau
