@@ -37,9 +37,9 @@ Der ESP32 ist empfindlich gegenüber Spannungseinbrüchen („Brownout“).
 Das passiert besonders dann, wenn mehrere LEDs gleichzeitig leuchten oder wenn das WLAN viel Strom zieht.
 
 👉 Deshalb unbedingt folgende Maßnahmen:
-- **Ein großer Elektrolytkondensator** (470 µF bis 1000 µF, 6,3 V oder mehr) **zwischen 3,3 V und GND**, möglichst nah am ESP32.  
-- **Ein Keramikkondensator** (100 nF) direkt am Board als schnelle Stütze.  
-- Falls die LEDs über externe Treiber/Transistoren geschaltet werden, dort ebenfalls einen Elko einbauen.  
+- **Ein großer Elektrolytkondensator** (470 µF bis 1000 µF, 6,3 V oder mehr) **zwischen 3,3 V und GND**, möglichst nah am ESP32 bzw. am `3V3`-Pin des Devkits.  
+- **Ein Keramikkondensator** (100 nF) direkt am Board bzw. an `3V3`/`GND` als schnelle Stütze.  
+- Wenn die Schaltung über USB versorgt wird und die LED-Last die `5V`-Schiene stark belastet, zusätzlich ein weiterer Elko **zwischen `USB 5V` und `GND`** nahe am Devkit oder an der Last.  
 
 So werden Spannungsschwankungen abgefangen und der ESP32 läuft stabil.
 
@@ -49,29 +49,30 @@ So werden Spannungsschwankungen abgefangen und der ESP32 läuft stabil.
 
 ### Prinzipdarstellung (ASCII)
 
-```
-        +5V ----+-----------------------------+
-                |                             |
-              [Regler 3.3V]                   |
-                |                             |
-               ESP32                          |
-          +-----+-----+                       |
-          |           |                       |
-      GPIOx       GPIOy ...                   |
-       |            |                         |
-      [R]          [R]                        |
-       |            |                         |
-      LED          LED                        |
-       |            |                         |
-      GND---------- GND-----------------------+
-                |
-          [470µF Elko]
-                |
-               GND
+```  
+USB 5V ----+-----------------------------+
+           |                             |
+      [DevKit-Regler 3.3V]               |
+           |                             |
+          3V3 ---+---- ESP32             |
+                 |      +-----+-----+    |
+             [470uF]    |           |    |
+                 |  GPIOx       GPIOy ...|
+                GND  |            |      |
+                    [R]          [R]     |
+                     |            |      |
+                    LED          LED     |
+                     |            |      |
+GND -----------------+------------+------+
+
+Optional bei hoher LED-Last auf USB/5V:
+
+USB 5V ---+--- [zus. Elko 470uF..1000uF] --- GND
 ```
 
 - `[R]` = Vorwiderstand (220–470 Ω)  
-- `[470µF Elko]` = Pufferkondensator gegen Brownouts  
+- `[470uF]` = Pufferkondensator zwischen `3.3V` und `GND` gegen Brownouts  
+- `[zus. Elko 470uF..1000uF]` = optionaler Puffer zwischen `USB 5V` und `GND`, wenn die `5V`-Versorgung durch LED-Last stark einbricht  
 
 ---
 
@@ -152,6 +153,89 @@ Die Oberfläche ist **responsive** (Bootstrap-Layout) → funktioniert gut auf H
 3. **Upload** → ESP32 flashen  
 4. **Upload Filesystem Image** → Weboberfläche (index.html) ins LittleFS laden  
 5. Serielle Konsole (115200 Baud) starten → Logausgaben prüfen  
+
+### CLI-Beispiele
+
+```bash
+# Firmware für ESP32 DevKit V1 / ESP32-WROOM bauen
+$HOME/.platformio/penv/bin/pio run -e devkit-v1
+
+# Firmware hochladen
+$HOME/.platformio/penv/bin/pio run -e devkit-v1 -t upload
+
+# LittleFS-Image hochladen
+$HOME/.platformio/penv/bin/pio run -e devkit-v1 -t uploadfs
+```
+
+### Upload-Port / udev-Hinweise unter Linux
+
+Beim Upload kann PlatformIO z. B. folgende Meldungen anzeigen:
+
+```text
+Looking for upload port...
+
+Warning! Please install `99-platformio-udev.rules`.
+More details: https://docs.platformio.org/en/latest/core/installation/udev-rules.html
+
+Auto-detected: /dev/ttyS0
+Uploading .pio/build/devkit-v1/littlefs.bin
+esptool.py v4.11.0
+Serial port /dev/ttyS0
+```
+
+Das bedeutet meist:
+- Die empfohlenen PlatformIO-`udev`-Regeln für USB-Seriell-Geräte sind noch nicht installiert.
+- PlatformIO hat vermutlich den falschen Port erkannt.
+- `/dev/ttyS0` ist oft **nicht** der USB-Port des ESP32, sondern eine interne serielle Schnittstelle des PCs.
+
+Prüfe in so einem Fall die tatsächlich vorhandenen USB-Ports, z. B.:
+
+```bash
+ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null
+```
+
+Und gib den Upload-Port dann explizit an:
+
+```bash
+$HOME/.platformio/penv/bin/pio run -e devkit-v1 -t upload --upload-port /dev/ttyUSB0
+$HOME/.platformio/penv/bin/pio run -e devkit-v1 -t uploadfs --upload-port /dev/ttyUSB0
+```
+
+Wenn du unter Linux häufiger Upload-Probleme oder Zugriffsfehler auf serielle Geräte hast, installiere die PlatformIO-`udev`-Regeln:
+- Doku: https://docs.platformio.org/en/latest/core/installation/udev-rules.html
+
+### Richtigen Port beim Einstecken finden
+
+Wenn unklar ist, welches Device zu deinem ESP32 gehört, öffne vor dem Einstecken ein Kernel-Log:
+
+```bash
+journalctl -k -f
+```
+
+Alternativ:
+
+```bash
+dmesg --follow
+```
+
+Stecke dann den ESP32 an. Typische Meldungen nennen danach den neu angelegten Port, z. B.:
+
+```text
+cdc_acm 1-1.3:1.0: ttyACM0: USB ACM device
+```
+
+oder:
+
+```text
+ch341-uart converter now attached to ttyUSB0
+```
+
+Diesen Port kannst du anschließend direkt für Upload und Monitor verwenden:
+
+```bash
+$HOME/.platformio/penv/bin/pio run -e devkit-v1 -t upload --upload-port /dev/ttyACM0
+$HOME/.platformio/penv/bin/pio device monitor --port /dev/ttyACM0 --baud 115200
+```
 
 ---
 

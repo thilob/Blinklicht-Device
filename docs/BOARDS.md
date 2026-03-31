@@ -8,6 +8,7 @@ Dieses Projekt unterstützt verschiedene ESP32-Boards mit unterschiedlichen Pin-
 
 ### ESP32 DevKit (Standard)
 - **Environment:** `esp32dev`
+- **Alias:** `devkit-v1`
 - **Ausgänge:** 10 LEDs
 - **Pins:** GPIO 16, 17, 18, 19, 21, 22, 23, 25, 26, 27
 - **Reset Pin:** GPIO 34
@@ -49,13 +50,16 @@ Dieses Projekt unterstützt verschiedene ESP32-Boards mit unterschiedlichen Pin-
 
 ### 1. Board auswählen in VS Code
 
-In VS Code unten in der Statusleiste auf das PlatformIO-Symbol klicken und das gewünschte Environment auswählen, z.B. `esp32dev`.
+In VS Code unten in der Statusleiste auf das PlatformIO-Symbol klicken und das gewünschte Environment auswählen, z.B. `esp32dev` oder `devkit-v1`.
 
 ### 2. Mit PlatformIO CLI
 
 ```bash
 # ESP32 DevKit kompilieren
 pio run -e esp32dev
+
+# ESP32 DevKit V1 (ESP32-WROOM) kompilieren
+pio run -e devkit-v1
 
 # ESP32-C3 kompilieren und uploaden
 pio run -e esp32-c3-devkitm-1 -t upload
@@ -167,7 +171,7 @@ Wenn du von ESP32 DevKit auf ESP32-C3 wechseln möchtest:
 
 | Board | PlatformIO board= | Environment Name |
 |-------|------------------|------------------|
-| ESP32 DevKit | `esp32dev` | `esp32dev` |
+| ESP32 DevKit | `esp32dev` | `esp32dev`, `devkit-v1` |
 | ESP32-C3 | `esp32-c3-devkitm-1` | `esp32-c3-devkitm-1` |
 | ESP32-S2 | `lolin_s2_mini` | `esp32s2-mini` |
 | ESP32-S3 | `esp32-s3-devkitc-1` | `esp32s3-devkit` |
