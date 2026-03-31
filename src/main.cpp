@@ -643,6 +643,23 @@ static void handlePutWifi() {
   wifiRestartPending = true;
 }
 
+static void handleApplyConfig() {
+  if (wifiRestartPending) { server.send(503, "text/plain", "Server restarting"); return; }
+  applyHardware();
+  addCORS();
+  server.send(200, "text/plain", "OK (config applied)");
+}
+
+static void handleApplyWifi() {
+  if (wifiRestartPending) { server.send(503, "text/plain", "Server restarting"); return; }
+
+  addCORS();
+  server.send(200, "text/plain", "OK (wifi applying)");
+
+  serverRunning = false;
+  wifiRestartPending = true;
+}
+
 /// -------------------- WIFI Start/Stop + Routen --------------------
 static void startServerRoutes() {
   // Favicon & Touch-Icons -> leere 204-Antwort
@@ -683,9 +700,11 @@ static void startServerRoutes() {
   // APIs
   server.on("/api/config",  HTTP_GET, handleGetConfig);
   server.on("/api/config",  HTTP_PUT, handlePutConfig);
+  server.on("/api/config/apply", HTTP_POST, handleApplyConfig);
 
   server.on("/api/wifi",    HTTP_GET, handleGetWifi);
   server.on("/api/wifi",    HTTP_PUT, handlePutWifi);
+  server.on("/api/wifi/apply", HTTP_POST, handleApplyWifi);
 
   server.on("/api/sysinfo", HTTP_GET, [](){
     JsonDocument doc;

@@ -866,7 +866,11 @@
 
     async function saveWifiOnly() {
       if (hasWifiAPI) {
-        const r = await fetch("/api/wifi", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collectWifiOnly()) });
+        const r = await fetch("/api/wifi", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wifi: collectWifiOnly() })
+        });
         if (!r.ok) { toast("Speichern fehlgeschlagen (WLAN)", "err"); return false; }
         toast("Gespeichert (WLAN)", "ok"); return true;
       } else {
