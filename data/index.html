@@ -932,8 +932,8 @@
           <li><b>GPIO</b>: Pin-Nummer am ESP32.</li>
           <li><b>LEDC ch</b>: PWM-Kanal (0–15); jeder Ausgang braucht einen eigenen Kanal.</li>
           <li><b>Pattern</b>: Verknüpftes Blinkmuster.</li>
-          <li><b>Rest ms (-1=Pat)</b>: Dauer des letzten Schritts (Pause). <code>-1</code> = Pause aus Pattern
-            übernehmen.</li>
+          <li><b>Zusatzpause ms (-1=aus)</b>: Verlängert den letzten Schritt des gewählten Patterns um diesen Wert.
+            <code>-1</code> = keine zusätzliche Verlängerung.</li>
           <li><b>Gruppe</b>: Gruppennummer; Gruppen können komplett an/aus geschaltet werden.</li>
           <li><b>Phase ms</b>: Zeitverschiebung innerhalb eines Pattern-Zyklus (für versetztes Blinken).</li>
           <li><b>Aktion</b>: Ausgang löschen.</li>
@@ -1025,7 +1025,7 @@
         pin: Number(light.pin || 0),
         channel: Number(light.channel || 0),
         patternIndex: Number(light.patternIndex || 0),
-        restOverrideMs: Number(light.restOverrideMs ?? -1),
+        extraPauseMs: Number(light.extraPauseMs ?? light.restOverrideMs ?? -1),
         groupId: Number(light.groupId || 0),
         phase_ms: Number(light.phase_ms || 0)
       };
@@ -1253,7 +1253,7 @@
               warnings.push(`config.lights[${lightIndex}] ist ungültig und wurde übersprungen`);
               return [];
             }
-            pushUnknownKeys(light, ["pin", "channel", "patternIndex", "restOverrideMs", "groupId", "phase_ms"], `config.lights[${lightIndex}]`, warnings);
+            pushUnknownKeys(light, ["pin", "channel", "patternIndex", "extraPauseMs", "restOverrideMs", "groupId", "phase_ms"], `config.lights[${lightIndex}]`, warnings);
             if (!Number.isFinite(Number(light.pin))) {
               warnings.push(`config.lights[${lightIndex}].pin ist ungültig und wurde übersprungen`);
               return [];
@@ -1262,7 +1262,7 @@
               pin: Math.max(0, normalizeInteger(light.pin, 0)),
               channel: Math.max(0, normalizeInteger(light.channel, 0)),
               patternIndex: Math.max(0, normalizeInteger(light.patternIndex, 0)),
-              restOverrideMs: normalizeInteger(light.restOverrideMs, -1),
+              extraPauseMs: normalizeInteger(light.extraPauseMs ?? light.restOverrideMs, -1),
               groupId: normalizeInteger(light.groupId, 0),
               phase_ms: Math.max(0, normalizeInteger(light.phase_ms, 0))
             }];
@@ -1776,7 +1776,7 @@
         pin: 21,
         channel: fallbackChannel,
         patternIndex: 0,
-        restOverrideMs: -1,
+        extraPauseMs: -1,
         groupId: state.groups[0]?.id ?? 0,
         phase_ms: 0
       });
@@ -1788,7 +1788,7 @@
       fillSelectOptions(patternSelect, state.patterns.map((pattern, idx) => ({
         value: idx, label: `[${idx}] ${pattern.name || "(ohne Namen)"}`
       })), working.patternIndex);
-      const restInput = el("input"); restInput.type = "number"; restInput.value = working.restOverrideMs;
+      const extraPauseInput = el("input"); extraPauseInput.type = "number"; extraPauseInput.value = working.extraPauseMs;
       const groupInput = el("select");
       fillSelectOptions(groupInput, state.groups.map(group => ({
         value: group.id, label: getGroupLabel(group.id)
@@ -1798,7 +1798,7 @@
       pinInput.addEventListener("input", () => working.pin = Number(pinInput.value || 0));
       chInput.addEventListener("input", () => working.channel = Number(chInput.value || 0));
       patternSelect.addEventListener("change", () => working.patternIndex = Number(patternSelect.value || 0));
-      restInput.addEventListener("input", () => working.restOverrideMs = Number(restInput.value || -1));
+      extraPauseInput.addEventListener("input", () => working.extraPauseMs = Number(extraPauseInput.value || -1));
       groupInput.addEventListener("change", () => working.groupId = Number(groupInput.value || 0));
       phaseInput.addEventListener("input", () => working.phase_ms = Number(phaseInput.value || 0));
 
@@ -1806,7 +1806,7 @@
         createField("GPIO", pinInput),
         createField("LEDC ch", chInput),
         createField("Pattern", patternSelect),
-        createField("Rest ms (-1=Pat)", restInput),
+        createField("Zusatzpause ms (-1=aus)", extraPauseInput),
         createField("Gruppe", groupInput),
         createField("Phase ms", phaseInput)
       );
@@ -2052,7 +2052,7 @@
         const groupLabel = getGroupLabel(light.groupId);
         const body = el("div", "entity-meta");
         body.appendChild(el("div", "entity-title", `GPIO ${light.pin}, Kanal ${light.channel} • ${groupLabel}`));
-        body.appendChild(el("div", "entity-copy", `${patternName}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
+        body.appendChild(el("div", "entity-copy", `${patternName}, Phase ${light.phase_ms} ms, Zusatzpause ${light.extraPauseMs} ms`));
         const groupChip = el("div", "group-chip", groupLabel);
         groupChip.style.borderColor = accent.border;
         groupChip.style.background = accent.bgSoft;

@@ -96,7 +96,7 @@ Beispiel für ein Doppelblitz-Pattern:
 
 - Der **letzte Schritt ist die Pause**, bevor das Muster neu startet.  
 - Pro Ausgang kann das Pattern individuell gewählt werden.  
-- Jeder Ausgang kann zusätzlich eine **eigene Pausenlänge** erzwingen.  
+- Jeder Ausgang kann zusätzlich eine **Zusatzpause** bekommen, die auf den letzten Schritt des Patterns aufaddiert wird.  
 
 ### Gruppen
 - Mehrere Ausgänge können zu **Gruppen** zusammengefasst werden.  
@@ -125,7 +125,7 @@ Man sieht, was man tippt (Echo-Funktion ist aktiv).
 - `group list` → Gruppen anzeigen  
 - `group add <id> <name>` → Gruppe anlegen  
 - `light list` → Ausgänge anzeigen  
-- `light add <pin> <ch> <pidx> <rest> <gid> <phase>` → Ausgang hinzufügen  
+- `light add <pin> <ch> <pidx> <zusatzpause> <gid> <phase>` → Ausgang hinzufügen  
 
 ---
 

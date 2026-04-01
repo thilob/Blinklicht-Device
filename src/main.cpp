@@ -15,7 +15,7 @@
    Blaulicht-Controller (Multi-Board ESP32)
    - Flexible Ausgänge (board-abhängig), PWM (LEDC) 5 kHz / 8-bit, nicht-blockierend
    - Mehrere Patterns (letzter Step = Ruhepause), CRUD via Web-UI (AP/STA) ODER CLI
-   - Lights: pin, channel, patternIndex, restOverrideMs, groupId, phase_ms
+   - Lights: pin, channel, patternIndex, extraPauseMs, groupId, phase_ms
    - Gruppen an/aus (freeze der Zeit), Phasenverschiebung pro Ausgang
    - Persistenz: /config.json (LittleFS)
    - WLAN: AP (eindeutige SSID + Captive Portal) / STA (DHCP + mDNS Hostname)
@@ -66,7 +66,7 @@ struct LightCfg {
   uint8_t pin;
   uint8_t channel;        // 0..15
   uint8_t patternIndex;   // Index in patterns[]
-  int     restOverrideMs; // -1 => Pattern-Pause nutzen; sonst Dauer für letzten Step
+  int     extraPauseMs;   // -1 => keine Zusatzpause; sonst Zusatzdauer für den letzten Step
   int     groupId;
   int     phase_ms;       // Phasenverschiebung relativ zum Pattern-Zyklus (>=0)
 };
@@ -194,7 +194,9 @@ private:
   }
 
   static uint16_t effectiveDuration(const LightCfg &L, const Pattern &P, size_t i, uint16_t nominal) {
-    if (i == restIndexOf(P) && L.restOverrideMs >= 0) return (uint16_t)L.restOverrideMs;
+    if (i == restIndexOf(P) && L.extraPauseMs >= 0) {
+      return (uint16_t)min<uint32_t>(65535UL, (uint32_t)nominal + (uint32_t)L.extraPauseMs);
+    }
     return nominal;
   }
 
@@ -284,7 +286,7 @@ static bool saveConfig() {
     jl["pin"]            = L.pin;
     jl["channel"]        = L.channel;
     jl["patternIndex"]   = L.patternIndex;
-    jl["restOverrideMs"] = L.restOverrideMs;
+    jl["extraPauseMs"]   = L.extraPauseMs;
     jl["groupId"]        = L.groupId;
     jl["phase_ms"]       = L.phase_ms;
   }
@@ -343,7 +345,8 @@ static bool loadConfig() {
     L.pin            = (uint8_t)(jl["pin"]            | 255);
     L.channel        = (uint8_t)(jl["channel"]        | 0);
     L.patternIndex   = (uint8_t)(jl["patternIndex"]   | 0);
-    L.restOverrideMs = (int)     (jl["restOverrideMs"]| -1);
+    if (!jl["extraPauseMs"].isNull())      L.extraPauseMs = (int)(jl["extraPauseMs"] | -1);
+    else                                   L.extraPauseMs = (int)(jl["restOverrideMs"] | -1);
     L.groupId        = (int)     (jl["groupId"]       | 0);
     L.phase_ms       = (int)     (jl["phase_ms"]      | 0);
     lights.push_back(std::move(L));
@@ -389,7 +392,7 @@ static void makeDefaultConfig() {
     L.pin = LED_PINS[i];
     L.channel = (uint8_t)i;
     L.patternIndex = (i % 2 == 0) ? 0 : 1;  // Abwechselnd Pattern 0 und 1
-    L.restOverrideMs = -1;
+    L.extraPauseMs = -1;
     L.groupId = (i < DEFAULT_LED_OUTPUTS / 2) ? 0 : 1;  // Vordere Hälfte = Front, Rest = Heck
     L.phase_ms = (int)(i * 50);  // Phasenverschiebung
     lights.push_back(L);
@@ -529,7 +532,7 @@ static void handleGetConfig() {
     jl["pin"]            = L.pin;
     jl["channel"]        = L.channel;
     jl["patternIndex"]   = L.patternIndex;
-    jl["restOverrideMs"] = L.restOverrideMs;
+    jl["extraPauseMs"]   = L.extraPauseMs;
     jl["groupId"]        = L.groupId;
     jl["phase_ms"]       = L.phase_ms;
   }
@@ -577,7 +580,8 @@ static void handlePutConfig() {
     L.pin            = (uint8_t)(jl["pin"]            | 255);
     L.channel        = (uint8_t)(jl["channel"]        | 0);
     L.patternIndex   = (uint8_t)(jl["patternIndex"]   | 0);
-    L.restOverrideMs = (int)     (jl["restOverrideMs"]| -1);
+    if (!jl["extraPauseMs"].isNull())      L.extraPauseMs = (int)(jl["extraPauseMs"] | -1);
+    else                                   L.extraPauseMs = (int)(jl["restOverrideMs"] | -1);
     L.groupId        = (int)     (jl["groupId"]       | 0);
     L.phase_ms       = (int)     (jl["phase_ms"]      | 0);
     lights.push_back(std::move(L));
@@ -874,8 +878,8 @@ static void cliHelp() {
     "pat step del <pidx> <sidx>\n"
     "\n-- Lights --\n"
     "light list                        : Lichter auflisten\n"
-    "light add <pin> <ch> <pidx> <rest> <gid> <phase>\n"
-    "light set <idx> <field> <value>   : field=pin|ch|pidx|rest|gid|phase\n"
+    "light add <pin> <ch> <pidx> <zusatzpause> <gid> <phase>\n"
+    "light set <idx> <field> <value>   : field=pin|ch|pidx|zusatzpause|gid|phase\n"
     "light del <idx>                   : Ausgang löschen\n"
   ));
 }
@@ -907,8 +911,8 @@ static void cliPatList() {
 static void cliLightList() {
   for (size_t i=0;i<lights.size();++i) {
     auto &L = lights[i];
-    Serial.printf("[%u] pin=%u ch=%u pidx=%u rest=%d gid=%d phase=%d\n",
-      (unsigned)i, L.pin, L.channel, L.patternIndex, L.restOverrideMs, L.groupId, L.phase_ms);
+    Serial.printf("[%u] pin=%u ch=%u pidx=%u zusatzpause=%d gid=%d phase=%d\n",
+      (unsigned)i, L.pin, L.channel, L.patternIndex, L.extraPauseMs, L.groupId, L.phase_ms);
   }
 }
 
@@ -1039,7 +1043,7 @@ static void handleCliLine(const String& line) {
     if (sub=="add" && t.size()>=8) {
       LightCfg L;
       L.pin=asLong(t[2]); L.channel=asLong(t[3]); L.patternIndex=asLong(t[4]);
-      L.restOverrideMs=asLong(t[5]); L.groupId=asLong(t[6]); L.phase_ms=asLong(t[7]);
+      L.extraPauseMs=asLong(t[5]); L.groupId=asLong(t[6]); L.phase_ms=asLong(t[7]);
       lights.push_back(L); saveConfig(); cliApplyAndMaybeStartWifi(); Serial.println("OK"); return;
     }
     if (sub=="set" && t.size()>=5) {
@@ -1049,7 +1053,7 @@ static void handleCliLine(const String& line) {
       if (field=="pin") L.pin=val;
       else if (field=="ch") L.channel=val;
       else if (field=="pidx") L.patternIndex=val;
-      else if (field=="rest") L.restOverrideMs=val;
+      else if (field=="zusatzpause" || field=="extra" || field=="rest") L.extraPauseMs=val;
       else if (field=="gid") L.groupId=val;
       else if (field=="phase") L.phase_ms=val;
       else { Serial.println("Unknown field"); return; }
