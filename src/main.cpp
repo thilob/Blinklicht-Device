@@ -364,9 +364,9 @@ static void makeDefaultConfig() {
 
   patterns.clear(); groups.clear(); lights.clear();
 
-  // Pattern 0 (Blaulicht)
+  // Default-Patterns aus dem aktuellen Live-Stand des Devkits übernehmen
   {
-    Pattern p; p.name = "Pat0-Blaulicht";
+    Pattern p; p.name = "Pat0-Blaulicht_Dreifachblitz";
     LEDStep s[] = {
       {30,255,false},{30,0,false},{30,255,false},{30,0,false},
       {150,255,false},{30,0,true},{30,255,false},{0,0,false},{250,0,false}
@@ -374,10 +374,27 @@ static void makeDefaultConfig() {
     p.steps.assign(std::begin(s), std::end(s));
     patterns.push_back(std::move(p));
   }
-  // Pattern 1
   {
     Pattern p; p.name = "Pat1-DoppelStrobeWeich";
     LEDStep s[] = { {60,255,true},{40,0,true},{60,255,true},{40,0,true},{180,0,false} };
+    p.steps.assign(std::begin(s), std::end(s));
+    patterns.push_back(std::move(p));
+  }
+  {
+    Pattern p; p.name = "Drehspiegel";
+    LEDStep s[] = { {120,255,true},{500,0,false} };
+    p.steps.assign(std::begin(s), std::end(s));
+    patterns.push_back(std::move(p));
+  }
+  {
+    Pattern p; p.name = "Xenonblitzer einfach";
+    LEDStep s[] = { {30,255,false},{300,0,false} };
+    p.steps.assign(std::begin(s), std::end(s));
+    patterns.push_back(std::move(p));
+  }
+  {
+    Pattern p; p.name = "Xenonblitz doppelt";
+    LEDStep s[] = { {30,255,false},{100,0,false},{30,255,false},{300,0,false} };
     p.steps.assign(std::begin(s), std::end(s));
     patterns.push_back(std::move(p));
   }
