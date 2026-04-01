@@ -318,6 +318,104 @@
       justify-content: flex-end
     }
 
+    .entity-meta {
+      display: grid;
+      gap: 6px
+    }
+
+    .entity-title {
+      font-weight: 600
+    }
+
+    .entity-copy {
+      font-size: 13px;
+      color: var(--muted)
+    }
+
+    .steps-preview {
+      display: grid;
+      gap: 6px;
+      margin-top: 8px
+    }
+
+    .steps-preview .step {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      background: #12151a;
+      border: 1px solid #232a35;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 10, 14, .72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000
+    }
+
+    .modal-backdrop.open {
+      display: flex
+    }
+
+    .modal {
+      width: min(820px, 100%);
+      max-height: 90vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid #273041;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 22px 70px rgba(0, 0, 0, .45)
+    }
+
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 14px
+    }
+
+    .modal-head h3,
+    .modal-head p {
+      margin: 0
+    }
+
+    .modal-head p {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px
+    }
+
+    .modal-close {
+      background: transparent;
+      border: 1px solid #2a3342;
+      color: var(--txt);
+      border-radius: 999px;
+      width: 38px;
+      height: 38px;
+      cursor: pointer
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap
+    }
+
+    .hidden {
+      display: none !important
+    }
+
     @media(max-width:700px) {
       .wrap {
         padding: 12px
@@ -514,8 +612,10 @@
       <div class="row section-header">
         <h3 style="margin:0">Patterns</h3>
         <div class="toolbar">
-          <input id="pat-new-name" placeholder="Neues Pattern: Name" style="min-width:220px" />
           <button class="btn btn-acc" id="btn-pat-add">＋ Pattern</button>
+          <button class="btn" id="btn-pat-export">⤓ XML exportieren</button>
+          <button class="btn" id="btn-pat-import">⤒ XML importieren</button>
+          <input id="pat-import-file" type="file" accept=".xml,text/xml,application/xml" class="hidden" />
           <button class="btn" id="btn-pat-save">💾 Speichern</button>
           <button class="btn btn-ok" id="btn-pat-apply">▶ Anwenden (LEDs)</button>
         </div>
@@ -548,8 +648,6 @@
       <div class="row section-header">
         <h3 style="margin:0">Gruppen</h3>
         <div class="toolbar">
-          <input id="grp-new-id" type="number" placeholder="ID" style="width:120px" />
-          <input id="grp-new-name" placeholder="Name" style="min-width:220px" />
           <button class="btn btn-acc" id="btn-grp-add">＋ Gruppe</button>
           <button class="btn" id="btn-grp-save">💾 Speichern</button>
           <button class="btn btn-ok" id="btn-grp-apply">▶ Anwenden (LEDs)</button>
@@ -582,12 +680,6 @@
       <div class="row section-header">
         <h3 style="margin:0">Ausgänge</h3>
         <div class="toolbar">
-          <input id="l-pin" type="number" placeholder="GPIO" style="width:110px" />
-          <input id="l-ch" type="number" placeholder="LEDC ch" style="width:120px" />
-          <select id="l-pidx" style="min-width:160px"></select>
-          <input id="l-rest" type="number" placeholder="Rest ms (-1=Pat)" style="width:150px" />
-          <input id="l-gid" type="number" placeholder="Gruppe" style="width:120px" />
-          <input id="l-phase" type="number" placeholder="Phase ms" style="width:130px" />
           <button class="btn btn-acc" id="btn-light-add">＋ Ausgang</button>
           <button class="btn" id="btn-light-save">💾 Speichern</button>
           <button class="btn btn-ok" id="btn-light-apply">▶ Anwenden (LEDs)</button>
@@ -621,21 +713,30 @@
   </div>
 
   <div id="toast" class="toast" style="display:none"></div>
+  <div id="entity-modal-backdrop" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <h3 id="entity-modal-title">Bearbeiten</h3>
+          <p id="entity-modal-subtitle">Entität bearbeiten</p>
+        </div>
+        <button id="entity-modal-close" class="modal-close" type="button">✕</button>
+      </div>
+      <div id="entity-modal-body"></div>
+      <div class="modal-actions">
+        <button id="entity-modal-cancel" class="btn" type="button">Abbrechen</button>
+        <button id="entity-modal-save" class="btn btn-ok" type="button">Übernehmen</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    // --- Utilities ---
     const $ = sel => document.querySelector(sel);
     const el = (tag, cls, txt) => {
       const n = document.createElement(tag);
       if (cls) n.className = cls;
       if (txt !== undefined) n.textContent = txt;
       return n;
-    };
-    const cell = (child, label = "", extraClass = "") => {
-      const c = el("div", "tbl-cell" + (extraClass ? (" " + extraClass) : ""));
-      if (label) c.dataset.label = label;
-      c.appendChild(child);
-      return c;
     };
     const toast = (msg, kind = "") => {
       const t = $("#toast");
@@ -645,10 +746,374 @@
       setTimeout(() => t.style.display = "none", 3000);
     };
 
-    // --- API compatibility detection ---
     let hasWifiAPI = false;
     let hasApplyConfig = false;
     let hasApplyWifi = false;
+
+    const state = {
+      wifi: { enabled: true, mode: "ap", ap: { ssid: "", password: "" }, sta: { ssid: "", password: "" } },
+      patterns: [],
+      groups: [],
+      lights: []
+    };
+
+    const modalState = {
+      kind: null,
+      mode: "create",
+      index: -1
+    };
+
+    function clonePattern(pattern = {}) {
+      return {
+        name: pattern.name || "",
+        steps: Array.isArray(pattern.steps) ? pattern.steps.map(step => ({
+          duration_ms: Number(step.duration_ms || 0),
+          level: Number(step.level || 0),
+          fade: !!step.fade
+        })) : []
+      };
+    }
+
+    function cloneGroup(group = {}) {
+      return {
+        id: Number(group.id || 0),
+        name: group.name || "",
+        enabled: group.enabled !== false
+      };
+    }
+
+    function cloneLight(light = {}) {
+      return {
+        pin: Number(light.pin || 0),
+        channel: Number(light.channel || 0),
+        patternIndex: Number(light.patternIndex || 0),
+        restOverrideMs: Number(light.restOverrideMs ?? -1),
+        groupId: Number(light.groupId || 0),
+        phase_ms: Number(light.phase_ms || 0)
+      };
+    }
+
+    function getNextGroupId() {
+      if (!Array.isArray(state.groups) || state.groups.length === 0) return 0;
+      return state.groups.reduce((maxId, g) => Math.max(maxId, Number(g.id) || 0), -1) + 1;
+    }
+
+    function confirmDelete(label) {
+      return window.confirm(`Soll ${label} wirklich gelöscht werden?`);
+    }
+
+    function patternSummary(pattern) {
+      const steps = Array.isArray(pattern.steps) ? pattern.steps : [];
+      if (!steps.length) return "Noch keine Schritte";
+      const total = steps.reduce((sum, step) => sum + Number(step.duration_ms || 0), 0);
+      return `${steps.length} Schritt(e), Gesamtdauer ${total} ms`;
+    }
+
+    function escapeXml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+
+    function downloadText(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportPatternsXml() {
+      const lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<patterns>"];
+      state.patterns.forEach(pattern => {
+        lines.push(`  <pattern name="${escapeXml(pattern.name || "")}">`);
+        (pattern.steps || []).forEach(step => {
+          lines.push(
+            `    <step duration_ms="${Number(step.duration_ms || 0)}" level="${Number(step.level || 0)}" fade="${step.fade ? "true" : "false"}" />`
+          );
+        });
+        lines.push("  </pattern>");
+      });
+      lines.push("</patterns>");
+      downloadText("patterns.xml", lines.join("\n"), "application/xml;charset=utf-8");
+      toast("Patterns als XML heruntergeladen", "ok");
+    }
+
+    function parsePatternsXml(text) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(text, "application/xml");
+      if (xml.querySelector("parsererror")) throw new Error("XML konnte nicht gelesen werden");
+      const patternNodes = Array.from(xml.querySelectorAll("patterns > pattern"));
+      if (!patternNodes.length) throw new Error("Keine <pattern>-Einträge gefunden");
+
+      return patternNodes.map(node => ({
+        name: node.getAttribute("name") || "Pattern",
+        steps: Array.from(node.querySelectorAll(":scope > step")).map(stepNode => ({
+          duration_ms: Number(stepNode.getAttribute("duration_ms") || 0),
+          level: Number(stepNode.getAttribute("level") || 0),
+          fade: String(stepNode.getAttribute("fade") || "false") === "true"
+        }))
+      }));
+    }
+
+    function fillSelectOptions(select, options, selectedValue) {
+      select.innerHTML = "";
+      options.forEach(option => {
+        const o = el("option", "", option.label);
+        o.value = String(option.value);
+        select.appendChild(o);
+      });
+      select.value = String(selectedValue);
+    }
+
+    function setModalContent({ title, subtitle, content, onSave }) {
+      $("#entity-modal-title").textContent = title;
+      $("#entity-modal-subtitle").textContent = subtitle;
+      const body = $("#entity-modal-body");
+      body.innerHTML = "";
+      body.appendChild(content);
+      $("#entity-modal-save").onclick = async () => {
+        const ok = await onSave();
+        if (ok !== false) closeEntityModal();
+      };
+      $("#entity-modal-backdrop").classList.add("open");
+      const firstField = body.querySelector("input, select, textarea, button");
+      if (firstField) firstField.focus();
+    }
+
+    function closeEntityModal() {
+      modalState.kind = null;
+      modalState.mode = "create";
+      modalState.index = -1;
+      $("#entity-modal-backdrop").classList.remove("open");
+      $("#entity-modal-body").innerHTML = "";
+      $("#entity-modal-save").onclick = null;
+    }
+
+    function createField(label, input) {
+      const wrap = el("div");
+      const l = el("label", "", label);
+      wrap.append(l, input);
+      return wrap;
+    }
+
+    function createStepEditorRow(step, onDelete) {
+      const row = el("div", "tbl-row tbl-steps");
+      const dur = el("input"); dur.type = "number"; dur.value = Number(step.duration_ms || 0);
+      const level = el("input"); level.type = "number"; level.min = 0; level.max = 255; level.value = Number(step.level || 0);
+      const fade = el("select");
+      fade.innerHTML = '<option value="false">false</option><option value="true">true</option>';
+      fade.value = String(!!step.fade);
+      const remove = el("button", "btn btn-err", "✖");
+
+      dur.addEventListener("input", () => step.duration_ms = Number(dur.value || 0));
+      level.addEventListener("input", () => step.level = Number(level.value || 0));
+      fade.addEventListener("change", () => step.fade = (fade.value === "true"));
+      remove.addEventListener("click", onDelete);
+
+      row.append(
+        createCell(dur, "Dauer (ms)"),
+        createCell(level, "Level (0-255)"),
+        createCell(fade, "Fade"),
+        createCell(remove, "Aktion", "action-cell")
+      );
+      return row;
+    }
+
+    function createCell(child, label = "", extraClass = "") {
+      const c = el("div", "tbl-cell" + (extraClass ? (" " + extraClass) : ""));
+      if (label) c.dataset.label = label;
+      c.appendChild(child);
+      return c;
+    }
+
+    function openPatternModal(index = -1) {
+      modalState.kind = "pattern";
+      modalState.mode = index >= 0 ? "edit" : "create";
+      modalState.index = index;
+
+      const working = clonePattern(index >= 0 ? state.patterns[index] : { name: "", steps: [] });
+      if (!working.steps.length) {
+        working.steps.push({ duration_ms: 100, level: 255, fade: false });
+      }
+
+      const content = el("div", "grid");
+      const nameInput = el("input");
+      nameInput.placeholder = "Pattern-Name";
+      nameInput.value = working.name;
+      nameInput.addEventListener("input", () => working.name = nameInput.value);
+      content.appendChild(createField("Name", nameInput));
+
+      const stepsWrap = el("div");
+      const stepsHead = el("div", "row section-header");
+      stepsHead.appendChild(el("h4", "", "Schritte"));
+      const addStep = el("button", "btn btn-acc", "＋ Schritt");
+      stepsHead.appendChild(addStep);
+      stepsWrap.appendChild(stepsHead);
+
+      const table = el("div", "tbl");
+      const head = el("div", "tbl-head tbl-steps");
+      head.append(
+        el("div", "tbl-cell", "Dauer (ms)"),
+        el("div", "tbl-cell", "Level (0-255)"),
+        el("div", "tbl-cell", "Fade"),
+        el("div", "tbl-cell", "Aktion")
+      );
+      table.appendChild(head);
+
+      function renderSteps() {
+        Array.from(table.querySelectorAll(".tbl-row")).forEach(row => row.remove());
+        working.steps.forEach((step, sidx) => {
+          table.appendChild(createStepEditorRow(step, () => {
+            working.steps.splice(sidx, 1);
+            if (!working.steps.length) {
+              working.steps.push({ duration_ms: 100, level: 0, fade: false });
+            }
+            renderSteps();
+          }));
+        });
+      }
+
+      addStep.addEventListener("click", () => {
+        working.steps.push({ duration_ms: 100, level: 0, fade: false });
+        renderSteps();
+      });
+
+      renderSteps();
+      stepsWrap.appendChild(table);
+      content.appendChild(stepsWrap);
+
+      setModalContent({
+        title: index >= 0 ? `Pattern ${index} bearbeiten` : "Neues Pattern",
+        subtitle: "Pattern-Daten und Schritte getrennt von der Listenansicht bearbeiten.",
+        content,
+        onSave: () => {
+          working.name = working.name.trim() || `Pattern ${index >= 0 ? index : state.patterns.length}`;
+          working.steps = working.steps.map(step => ({
+            duration_ms: Number(step.duration_ms || 0),
+            level: Math.max(0, Math.min(255, Number(step.level || 0))),
+            fade: !!step.fade
+          }));
+
+          if (index >= 0) state.patterns[index] = working;
+          else state.patterns.push(working);
+          renderPatterns();
+          renderLights();
+          toast(index >= 0 ? "Pattern aktualisiert" : "Pattern angelegt", "ok");
+        }
+      });
+    }
+
+    function openGroupModal(index = -1) {
+      modalState.kind = "group";
+      modalState.mode = index >= 0 ? "edit" : "create";
+      modalState.index = index;
+
+      const working = cloneGroup(index >= 0 ? state.groups[index] : { id: getNextGroupId(), name: "", enabled: true });
+      const content = el("div", "grid cols-2");
+
+      const idInput = el("input");
+      idInput.type = "number";
+      idInput.value = working.id;
+      idInput.addEventListener("input", () => working.id = Number(idInput.value || 0));
+
+      const nameInput = el("input");
+      nameInput.value = working.name;
+      nameInput.placeholder = "Gruppenname";
+      nameInput.addEventListener("input", () => working.name = nameInput.value);
+
+      const enabledSelect = el("select");
+      enabledSelect.innerHTML = '<option value="true">true</option><option value="false">false</option>';
+      enabledSelect.value = String(!!working.enabled);
+      enabledSelect.addEventListener("change", () => working.enabled = enabledSelect.value === "true");
+
+      content.append(
+        createField("ID", idInput),
+        createField("Name", nameInput),
+        createField("enabled", enabledSelect)
+      );
+
+      setModalContent({
+        title: index >= 0 ? `Gruppe ${working.id} bearbeiten` : "Neue Gruppe",
+        subtitle: "Gruppen werden in einem eigenen Formular erstellt und bearbeitet.",
+        content,
+        onSave: () => {
+          const duplicate = state.groups.some((group, gidx) => gidx !== index && Number(group.id) === Number(working.id));
+          if (duplicate) {
+            toast("Diese Gruppen-ID existiert bereits", "err");
+            return false;
+          }
+          working.name = working.name.trim() || `Gruppe ${working.id}`;
+          if (index >= 0) state.groups[index] = working;
+          else state.groups.push(working);
+          renderGroups();
+          renderLights();
+          toast(index >= 0 ? "Gruppe aktualisiert" : "Gruppe angelegt", "ok");
+        }
+      });
+    }
+
+    function openLightModal(index = -1) {
+      modalState.kind = "light";
+      modalState.mode = index >= 0 ? "edit" : "create";
+      modalState.index = index;
+
+      const fallbackChannel = Math.min(state.lights.length, 15);
+      const working = cloneLight(index >= 0 ? state.lights[index] : {
+        pin: 21,
+        channel: fallbackChannel,
+        patternIndex: 0,
+        restOverrideMs: -1,
+        groupId: state.groups[0]?.id ?? 0,
+        phase_ms: 0
+      });
+
+      const content = el("div", "grid cols-2");
+      const pinInput = el("input"); pinInput.type = "number"; pinInput.value = working.pin;
+      const chInput = el("input"); chInput.type = "number"; chInput.value = working.channel;
+      const patternSelect = el("select");
+      fillSelectOptions(patternSelect, state.patterns.map((pattern, idx) => ({
+        value: idx, label: `[${idx}] ${pattern.name || "(ohne Namen)"}`
+      })), working.patternIndex);
+      const restInput = el("input"); restInput.type = "number"; restInput.value = working.restOverrideMs;
+      const groupInput = el("input"); groupInput.type = "number"; groupInput.value = working.groupId;
+      const phaseInput = el("input"); phaseInput.type = "number"; phaseInput.value = working.phase_ms;
+
+      pinInput.addEventListener("input", () => working.pin = Number(pinInput.value || 0));
+      chInput.addEventListener("input", () => working.channel = Number(chInput.value || 0));
+      patternSelect.addEventListener("change", () => working.patternIndex = Number(patternSelect.value || 0));
+      restInput.addEventListener("input", () => working.restOverrideMs = Number(restInput.value || -1));
+      groupInput.addEventListener("input", () => working.groupId = Number(groupInput.value || 0));
+      phaseInput.addEventListener("input", () => working.phase_ms = Number(phaseInput.value || 0));
+
+      content.append(
+        createField("GPIO", pinInput),
+        createField("LEDC ch", chInput),
+        createField("Pattern", patternSelect),
+        createField("Rest ms (-1=Pat)", restInput),
+        createField("Gruppe", groupInput),
+        createField("Phase ms", phaseInput)
+      );
+
+      setModalContent({
+        title: index >= 0 ? `Ausgang ${index} bearbeiten` : "Neuer Ausgang",
+        subtitle: "Ausgänge werden separat von der Listenansicht gepflegt.",
+        content,
+        onSave: () => {
+          if (index >= 0) state.lights[index] = working;
+          else state.lights.push(working);
+          renderLights();
+          toast(index >= 0 ? "Ausgang aktualisiert" : "Ausgang angelegt", "ok");
+        }
+      });
+    }
 
     async function detectApis() {
       const tests = [
@@ -668,30 +1133,20 @@
       }
     }
 
-    // --- State ---
-    const state = {
-      wifi: { enabled: true, mode: "ap", ap: { ssid: "", password: "" }, sta: { ssid: "", password: "" } },
-      patterns: [],
-      groups: [],
-      lights: []
-    };
-
-    // --- Fetch + Render ---
     async function loadAll() {
       const r = await fetch("/api/config");
       if (!r.ok) { toast("Konnte /api/config nicht laden", "err"); return; }
       const cfg = await r.json();
 
-      state.patterns = cfg.patterns || [];
-      state.groups = cfg.groups || [];
-      state.lights = cfg.lights || [];
+      state.patterns = (cfg.patterns || []).map(clonePattern);
+      state.groups = (cfg.groups || []).map(cloneGroup);
+      state.lights = (cfg.lights || []).map(cloneLight);
       state.wifi = cfg.wifi || state.wifi;
 
-      // Lade Sysinfo für Board-Name
       const sysR = await fetch("/api/sysinfo");
       if (sysR.ok) {
         const sys = await sysR.json();
-        $("#badge-board").textContent = `Board: ${sys.board_name || '?'} (${sys.num_lights}/${sys.max_led_outputs})`;
+        $("#badge-board").textContent = `Board: ${sys.board_name || "?"} (${sys.num_lights}/${sys.max_led_outputs})`;
       }
 
       $("#badge-mode").textContent = "Modus: " + (state.wifi?.mode || "ap").toUpperCase();
@@ -709,10 +1164,10 @@
       if (!r.ok) { $("#sysinfo").textContent = "–"; return; }
       const s = await r.json();
       $("#sysinfo").innerHTML = `
-        <strong>Board:</strong> ${s.board_name || '?'} <span class="muted">(${s.max_led_outputs || '?'} LED-Ausgänge)</span><br>
+        <strong>Board:</strong> ${s.board_name || "?"} <span class="muted">(${s.max_led_outputs || "?"} LED-Ausgänge)</span><br>
         <strong>LEDC:</strong> ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle: ${s.max_ledc_channels}<br>
         <strong>Ausgänge konfiguriert:</strong> ${s.num_lights} von ${s.max_led_outputs} möglichen<br>
-        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || '?'}
+        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || "?"}
       `;
     }
 
@@ -723,260 +1178,143 @@
       $("#ap-pass").value = state.wifi.ap?.password || "";
       $("#sta-ssid").value = state.wifi.sta?.ssid || "";
       $("#sta-pass").value = state.wifi.sta?.password || "";
-
-      $("#wifi-warning").textContent =
-        hasWifiAPI ? "" :
-          "Warnung: getrennte WLAN-Endpunkte nicht verfügbar – Speichern kann einen WLAN-Neustart auslösen.";
+      $("#wifi-warning").textContent = hasWifiAPI ? "" : "Warnung: getrennte WLAN-Endpunkte nicht verfügbar – Speichern kann einen WLAN-Neustart auslösen.";
     }
 
     function renderPatterns() {
-      // dropdown for Lights
-      const dd = $("#l-pidx"); dd.innerHTML = "";
-      state.patterns.forEach((p, i) => {
-        const o = el("option", "", `[${i}] ${p.name || "(ohne Namen)"}`);
-        o.value = i; dd.appendChild(o);
-      });
-
       const box = $("#pat-list");
       box.querySelectorAll(".item").forEach(n => n.remove());
 
-      state.patterns.forEach((p, idx) => {
-        p.steps = Array.isArray(p.steps) ? p.steps : [];
-        const it = el("div", "item");
-        it.appendChild(el("div", "pill", idx));
+      state.patterns.forEach((pattern, idx) => {
+        const item = el("div", "item");
+        item.appendChild(el("div", "pill", idx));
 
-        const body = el("div");
+        const body = el("div", "entity-meta");
+        body.appendChild(el("div", "entity-title", pattern.name || `Pattern ${idx}`));
+        body.appendChild(el("div", "entity-copy", patternSummary(pattern)));
 
-        const name = el("input"); name.value = p.name || ""; name.placeholder = "Pattern-Name";
-        name.addEventListener("input", () => p.name = name.value);
-        body.appendChild(name);
-
-        // Steps „Tabelle“ mit Spaltenüberschriften
-        const table = el("div", "tbl");
-        const head = el("div", "tbl-head tbl-steps");
-        head.append(
-          el("div", "tbl-cell", "Dauer (ms)"),
-          el("div", "tbl-cell", "Level (0–255)"),
-          el("div", "tbl-cell", "Fade"),
-          el("div", "tbl-cell", "Aktion")
-        );
-        table.appendChild(head);
-
-        p.steps.forEach((s, sidx) => {
-          const row = el("div", "tbl-row tbl-steps");
-          const d = el("input"); d.type = "number"; d.placeholder = "ms"; d.value = s.duration_ms ?? 0;
-          const l = el("input"); l.type = "number"; l.placeholder = "0..255"; l.min = 0; l.max = 255; l.value = s.level ?? 0;
-          const f = el("select"); f.innerHTML = '<option value="false">false</option><option value="true">true</option>'; f.value = String(!!s.fade);
-          const delBtn = el("button", "btn btn-err", "✖");
-
-          d.addEventListener("change", () => s.duration_ms = Number(d.value));
-          l.addEventListener("change", () => s.level = Number(l.value));
-          f.addEventListener("change", () => s.fade = (f.value === "true"));
-          delBtn.addEventListener("click", () => {
-            p.steps.splice(sidx, 1);
-            renderPatterns();
-          });
-
-          row.append(
-            cell(d, "Dauer (ms)"),
-            cell(l, "Level (0-255)"),
-            cell(f, "Fade"),
-            cell(delBtn, "Aktion", "action-cell")
+        const preview = el("div", "steps-preview");
+        (pattern.steps || []).slice(0, 3).forEach(step => {
+          const stepEl = el("div", "step");
+          stepEl.append(
+            el("div", "", `Dauer: ${Number(step.duration_ms || 0)} ms`),
+            el("div", "", `Level: ${Number(step.level || 0)}`),
+            el("div", "", `Fade: ${step.fade ? "true" : "false"}`)
           );
-          table.appendChild(row);
+          preview.appendChild(stepEl);
         });
-
-        // add step
-        const addRow = el("div", "row"); addRow.style.marginTop = "8px";
-        const add = el("button", "btn btn-acc", "＋ Schritt");
-        add.addEventListener("click", () => {
-          p.steps.push({ duration_ms: 100, level: 0, fade: false });
-          renderPatterns();
-        });
-        addRow.appendChild(add);
-
-        body.append(table, addRow);
-        it.appendChild(body);
+        if ((pattern.steps || []).length > 3) {
+          preview.appendChild(el("div", "note", `+ ${(pattern.steps || []).length - 3} weitere Schritte`));
+        }
+        body.appendChild(preview);
+        item.appendChild(body);
 
         const actions = el("div", "row item-actions");
-        const rm = el("button", "btn btn-err", "Pattern löschen");
-        rm.addEventListener("click", () => {
+        const editBtn = el("button", "btn", "Bearbeiten");
+        editBtn.addEventListener("click", () => openPatternModal(idx));
+        const delBtn = el("button", "btn btn-err", "Löschen");
+        delBtn.addEventListener("click", () => {
+          if (!confirmDelete(`Pattern "${pattern.name || idx}"`)) return;
           state.patterns.splice(idx, 1);
           renderPatterns();
+          renderLights();
         });
-        actions.appendChild(rm);
-        it.appendChild(actions);
+        actions.append(editBtn, delBtn);
+        item.appendChild(actions);
 
-        box.appendChild(it);
+        box.appendChild(item);
       });
-    }
-
-    function getNextGroupId() {
-      if (!Array.isArray(state.groups) || state.groups.length === 0) return 0;
-      return state.groups.reduce((maxId, g) => Math.max(maxId, Number(g.id) || 0), -1) + 1;
-    }
-
-    function refreshNextGroupId() {
-      const input = $("#grp-new-id");
-      if (!input) return;
-      const nextId = getNextGroupId();
-      input.placeholder = String(nextId);
-      if (!input.value.trim()) input.value = String(nextId);
     }
 
     function renderGroups() {
       const box = $("#grp-list");
       box.querySelectorAll(".item").forEach(n => n.remove());
-      state.groups.forEach((g, i) => {
-        const it = el("div", "item");
-        it.appendChild(el("div", "pill", g.id));
 
-        const body = el("div");
+      state.groups.forEach((group, idx) => {
+        const item = el("div", "item");
+        item.appendChild(el("div", "pill", group.id));
 
-        const table = el("div", "tbl");
-        const head = el("div", "tbl-head tbl-groups");
-        head.append(
-          el("div", "tbl-cell", "Name"),
-          el("div", "tbl-cell", "enabled"),
-          el("div", "tbl-cell", "Aktion")
-        );
-        table.appendChild(head);
+        const body = el("div", "entity-meta");
+        body.appendChild(el("div", "entity-title", group.name || `Gruppe ${group.id}`));
+        body.appendChild(el("div", "entity-copy", `enabled: ${group.enabled ? "true" : "false"}`));
+        item.appendChild(body);
 
-        const row = el("div", "tbl-row tbl-groups");
-        const name = el("input"); name.value = g.name || ""; name.placeholder = "Gruppenname";
-        name.addEventListener("input", () => g.name = name.value);
-
-        const enSel = el("select");
-        enSel.innerHTML = '<option value="true">true</option><option value="false">false</option>';
-        enSel.value = String(!!g.enabled);
-        enSel.addEventListener("change", () => g.enabled = (enSel.value === "true"));
-
-        const delBtn = el("button", "btn btn-err", "✖");
+        const actions = el("div", "row item-actions");
+        const editBtn = el("button", "btn", "Bearbeiten");
+        editBtn.addEventListener("click", () => openGroupModal(idx));
+        const delBtn = el("button", "btn btn-err", "Löschen");
         delBtn.addEventListener("click", () => {
-          state.groups.splice(i, 1); renderGroups();
+          if (!confirmDelete(`Gruppe "${group.name || group.id}"`)) return;
+          state.groups.splice(idx, 1);
+          renderGroups();
         });
+        actions.append(editBtn, delBtn);
+        item.appendChild(actions);
 
-        row.append(
-          cell(name, "Name"),
-          cell(enSel, "enabled"),
-          cell(delBtn, "Aktion", "action-cell")
-        );
-        table.appendChild(row);
-
-        body.appendChild(table);
-        it.appendChild(body);
-
-        const actions = el("div", "row"); // Platzhalter
-        it.appendChild(actions);
-
-        box.appendChild(it);
+        box.appendChild(item);
       });
-
-      refreshNextGroupId();
     }
 
     function renderLights() {
       const box = $("#light-list");
       box.querySelectorAll(".item").forEach(n => n.remove());
-      state.lights.forEach((L, i) => {
-        const it = el("div", "item");
-        it.appendChild(el("div", "pill", i));
 
-        const body = el("div");
+      state.lights.forEach((light, idx) => {
+        const item = el("div", "item");
+        item.appendChild(el("div", "pill", idx));
 
-        const table = el("div", "tbl");
-        const head = el("div", "tbl-head tbl-lights");
-        head.append(
-          el("div", "tbl-cell", "GPIO"),
-          el("div", "tbl-cell", "LEDC ch"),
-          el("div", "tbl-cell", "Pattern"),
-          el("div", "tbl-cell", "Rest ms (-1=Pat)"),
-          el("div", "tbl-cell", "Gruppe"),
-          el("div", "tbl-cell", "Phase ms"),
-          el("div", "tbl-cell", "Aktion")
-        );
-        table.appendChild(head);
+        const patternName = state.patterns[Number(light.patternIndex)]?.name || `Pattern ${Number(light.patternIndex || 0)}`;
+        const body = el("div", "entity-meta");
+        body.appendChild(el("div", "entity-title", `GPIO ${light.pin}, Kanal ${light.channel}`));
+        body.appendChild(el("div", "entity-copy", `${patternName}, Gruppe ${light.groupId}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
+        item.appendChild(body);
 
-        const row = el("div", "tbl-row tbl-lights");
-
-        const p = el("input"); p.type = "number"; p.placeholder = "GPIO"; p.value = L.pin ?? 21;
-        const ch = el("input"); ch.type = "number"; ch.placeholder = "Kanal"; ch.value = L.channel ?? 0;
-
-        const pidx = el("select");
-        pidx.innerHTML = "";
-        state.patterns.forEach((pt, ix) => {
-          const o = el("option", "", `[${ix}] ${pt.name || "(ohne Namen)"}`); o.value = ix; pidx.appendChild(o);
+        const actions = el("div", "row item-actions");
+        const editBtn = el("button", "btn", "Bearbeiten");
+        editBtn.addEventListener("click", () => openLightModal(idx));
+        const delBtn = el("button", "btn btn-err", "Löschen");
+        delBtn.addEventListener("click", () => {
+          if (!confirmDelete(`Ausgang ${idx} (GPIO ${light.pin})`)) return;
+          state.lights.splice(idx, 1);
+          renderLights();
         });
-        pidx.value = L.patternIndex ?? 0;
+        actions.append(editBtn, delBtn);
+        item.appendChild(actions);
 
-        const rest = el("input"); rest.type = "number"; rest.placeholder = "-1 oder ms"; rest.value = L.restOverrideMs ?? -1;
-        const gid = el("input"); gid.type = "number"; gid.placeholder = "Gruppe"; gid.value = L.groupId ?? 0;
-        const ph = el("input"); ph.type = "number"; ph.placeholder = "ms"; ph.value = L.phase_ms ?? 0;
-
-        [p, ch, pidx, rest, gid, ph].forEach(inp => inp.addEventListener("change", () => {
-          L.pin = Number(p.value); L.channel = Number(ch.value); L.patternIndex = Number(pidx.value);
-          L.restOverrideMs = Number(rest.value); L.groupId = Number(gid.value); L.phase_ms = Number(ph.value);
-        }));
-
-        const delBtn = el("button", "btn btn-err", "✖");
-        delBtn.addEventListener("click", () => { state.lights.splice(i, 1); renderLights(); });
-
-        row.append(
-            cell(p, "GPIO"),
-            cell(ch, "LEDC ch"),
-            cell(pidx, "Pattern"),
-            cell(rest, "Rest ms (-1=Pat)"),
-            cell(gid, "Gruppe"),
-            cell(ph, "Phase ms"),
-            cell(delBtn, "Aktion", "action-cell")
-          );
-
-        table.appendChild(row);
-        body.appendChild(table);
-        it.appendChild(body);
-
-        const actions = el("div", "row"); // Platzhalter
-        it.appendChild(actions);
-
-        box.appendChild(it);
+        box.appendChild(item);
       });
     }
 
-    // --- Collectors ---
     function collectConfigOnly() {
       return {
-        wifi: state.wifi, // Backend kann sie ignorieren, wenn getrennte Endpunkte
-        patterns: (state.patterns || []).map(p => ({
-          name: p.name || "", steps: (p.steps || []).map(s => ({
-            duration_ms: Number(s.duration_ms || 0),
-            level: Number(s.level || 0),
-            fade: !!s.fade
-          }))
-        })),
-        groups: (state.groups || []).map(g => ({ id: Number(g.id), name: g.name || "", enabled: !!g.enabled })),
-        lights: (state.lights || []).map(L => ({
-          pin: Number(L.pin), channel: Number(L.channel), patternIndex: Number(L.patternIndex),
-          restOverrideMs: Number(L.restOverrideMs), groupId: Number(L.groupId), phase_ms: Number(L.phase_ms)
-        }))
+        wifi: state.wifi,
+        patterns: state.patterns.map(clonePattern),
+        groups: state.groups.map(cloneGroup),
+        lights: state.lights.map(cloneLight)
       };
     }
+
     function collectWifiOnly() {
       const w = state.wifi || {};
       return {
-        enabled: (String(w.enabled) !== "false"),
+        enabled: String(w.enabled) !== "false",
         mode: (w.mode || "ap").toLowerCase(),
         ap: { ssid: w.ap?.ssid || "", password: w.ap?.password || "" },
         sta: { ssid: w.sta?.ssid || "", password: w.sta?.password || "" }
       };
     }
 
-    // --- Actions: Save/Apply ---
     async function saveConfigOnly() {
-      const payload = collectConfigOnly();
-      const r = await fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const r = await fetch("/api/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectConfigOnly())
+      });
       if (!r.ok) { toast("Speichern fehlgeschlagen (Config)", "err"); return false; }
-      toast("Gespeichert (Config)", "ok"); return true;
+      toast("Gespeichert (Config)", "ok");
+      return true;
     }
+
     async function applyConfigOnly() {
       if (hasApplyConfig) {
         const r = await fetch("/api/config/apply", { method: "POST" });
@@ -996,15 +1334,22 @@
           body: JSON.stringify({ wifi: collectWifiOnly() })
         });
         if (!r.ok) { toast("Speichern fehlgeschlagen (WLAN)", "err"); return false; }
-        toast("Gespeichert (WLAN)", "ok"); return true;
-      } else {
-        const cfg = collectConfigOnly();
-        cfg.wifi = collectWifiOnly();
-        const r = await fetch("/api/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) });
-        if (!r.ok) { toast("Speichern fehlgeschlagen (Fallback /api/config)", "err"); return false; }
-        toast("Gespeichert (Fallback) – WLAN könnte neu starten", "warn"); return true;
+        toast("Gespeichert (WLAN)", "ok");
+        return true;
       }
+
+      const cfg = collectConfigOnly();
+      cfg.wifi = collectWifiOnly();
+      const r = await fetch("/api/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg)
+      });
+      if (!r.ok) { toast("Speichern fehlgeschlagen (Fallback /api/config)", "err"); return false; }
+      toast("Gespeichert (Fallback) – WLAN könnte neu starten", "warn");
+      return true;
     }
+
     async function applyWifiOnly() {
       if (hasApplyWifi) {
         const r = await fetch("/api/wifi/apply", { method: "POST" });
@@ -1016,23 +1361,37 @@
       }
     }
 
-    // --- Tab switching ---
-    document.querySelectorAll(".tab-btn").forEach(b => {
-      b.addEventListener("click", () => {
-        document.querySelectorAll(".tab-btn").forEach(x => x.classList.remove("active"));
-        b.classList.add("active");
-        const tab = b.dataset.tab;
+    async function importPatternsFromFile(file) {
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const importedPatterns = parsePatternsXml(text);
+        if (!window.confirm(`Sollen die vorhandenen ${state.patterns.length} Pattern durch ${importedPatterns.length} importierte Pattern ersetzt werden?`)) {
+          return;
+        }
+        state.patterns = importedPatterns;
+        renderPatterns();
+        renderLights();
+        toast("Patterns aus XML importiert", "ok");
+      } catch (err) {
+        toast(`XML-Import fehlgeschlagen: ${err.message}`, "err");
+      }
+    }
+
+    document.querySelectorAll(".tab-btn").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(node => node.classList.remove("active"));
+        button.classList.add("active");
+        const tab = button.dataset.tab;
         ["status", "wifi", "patterns", "groups", "lights"].forEach(id => {
-          $("#tab-" + id).style.display = (id === tab) ? "" : "none";
+          $("#tab-" + id).style.display = id === tab ? "" : "none";
         });
       });
     });
 
-    // --- Wire buttons ---
     $("#btn-refresh").addEventListener("click", loadAll);
     $("#btn-reload").addEventListener("click", () => location.reload());
 
-    // WIFI controls -> keep state updated
     $("#wifi-enabled").addEventListener("change", e => state.wifi.enabled = (e.target.value === "true"));
     $("#wifi-mode").addEventListener("change", e => state.wifi.mode = e.target.value);
     $("#ap-ssid").addEventListener("input", e => { state.wifi.ap = state.wifi.ap || {}; state.wifi.ap.ssid = e.target.value; });
@@ -1043,46 +1402,35 @@
     $("#btn-wifi-save").addEventListener("click", saveWifiOnly);
     $("#btn-wifi-apply").addEventListener("click", applyWifiOnly);
 
-    // Patterns toolbar
-    $("#btn-pat-add").addEventListener("click", () => {
-      const n = $("#pat-new-name").value.trim() || "Pattern";
-      state.patterns.push({ name: n, steps: [] });
-      $("#pat-new-name").value = "";
-      renderPatterns();
+    $("#btn-pat-add").addEventListener("click", () => openPatternModal());
+    $("#btn-pat-export").addEventListener("click", exportPatternsXml);
+    $("#btn-pat-import").addEventListener("click", () => $("#pat-import-file").click());
+    $("#pat-import-file").addEventListener("change", async e => {
+      await importPatternsFromFile(e.target.files?.[0]);
+      e.target.value = "";
     });
     $("#btn-pat-save").addEventListener("click", saveConfigOnly);
     $("#btn-pat-apply").addEventListener("click", applyConfigOnly);
 
-    // Groups toolbar
-    $("#btn-grp-add").addEventListener("click", () => {
-      const rawId = $("#grp-new-id").value.trim();
-      const id = rawId === "" ? getNextGroupId() : Number(rawId);
-      const name = $("#grp-new-name").value.trim() || ("Gruppe " + id);
-      state.groups.push({ id, name, enabled: true });
-      $("#grp-new-id").value = ""; $("#grp-new-name").value = "";
-      renderGroups();
-    });
+    $("#btn-grp-add").addEventListener("click", () => openGroupModal());
     $("#btn-grp-save").addEventListener("click", saveConfigOnly);
     $("#btn-grp-apply").addEventListener("click", applyConfigOnly);
 
-    // Lights toolbar
-    $("#btn-light-add").addEventListener("click", () => {
-      const L = {
-        pin: Number($("#l-pin").value || 21),
-        channel: Number($("#l-ch").value || 0),
-        patternIndex: Number($("#l-pidx").value || 0),
-        restOverrideMs: Number($("#l-rest").value || -1),
-        groupId: Number($("#l-gid").value || 0),
-        phase_ms: Number($("#l-phase").value || 0),
-      };
-      state.lights.push(L);
-      $("#l-pin").value = $("#l-ch").value = $("#l-rest").value = $("#l-gid").value = $("#l-phase").value = "";
-      renderLights();
-    });
+    $("#btn-light-add").addEventListener("click", () => openLightModal());
     $("#btn-light-save").addEventListener("click", saveConfigOnly);
     $("#btn-light-apply").addEventListener("click", applyConfigOnly);
 
-    // Init
+    $("#entity-modal-close").addEventListener("click", closeEntityModal);
+    $("#entity-modal-cancel").addEventListener("click", closeEntityModal);
+    $("#entity-modal-backdrop").addEventListener("click", e => {
+      if (e.target === $("#entity-modal-backdrop")) closeEntityModal();
+    });
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape" && $("#entity-modal-backdrop").classList.contains("open")) {
+        closeEntityModal();
+      }
+    });
+
     (async () => {
       await detectApis();
       await loadAll();
