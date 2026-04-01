@@ -220,6 +220,45 @@
       color: var(--muted)
     }
 
+    .notice-card {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #2b3341;
+      background: #12161e
+    }
+
+    .notice-card strong {
+      display: block;
+      margin-bottom: 6px
+    }
+
+    .notice-card.warn {
+      border-color: rgba(255, 176, 32, .45);
+      background: rgba(110, 76, 17, .18)
+    }
+
+    .notice-card.ok {
+      border-color: rgba(46, 204, 113, .45);
+      background: rgba(22, 82, 49, .18)
+    }
+
+    .notice-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px
+    }
+
+    .backup-actions {
+      margin-top: 12px
+    }
+
+    .footer-note {
+      margin: 18px 0 8px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted)
+    }
+
     p,
     li,
     .note,
@@ -710,6 +749,16 @@
             <button class="btn" id="btn-refresh">↻ Aktualisieren</button>
             <button class="btn btn-warn" id="btn-reload">GUI neu laden</button>
           </div>
+          <div class="notice-card" style="margin-top:14px">
+            <strong>Backup & Restore</strong>
+            <div class="note">Sichert die komplette Konfiguration als JSON-Datei und kann auch ältere Stände tolerant wieder einlesen.</div>
+            <div class="row backup-actions">
+              <button class="btn btn-acc" id="btn-backup-download">Backup herunterladen</button>
+              <button class="btn" id="btn-backup-restore">Backup wiederherstellen</button>
+              <input type="file" id="backup-file" accept=".json,application/json" hidden />
+            </div>
+            <div id="restore-report" class="note" style="display:none"></div>
+          </div>
           <p class="note" style="margin-top:10px">
             Captive-Portal aktiv im AP-Modus. Im STA-Modus ist die Seite auch über
             <code>http://&lt;hostname&gt;.local</code> erreichbar.
@@ -891,6 +940,8 @@
         </ul>
       </div>
     </section>
+
+    <footer class="footer-note">made with vibe and love in NRW</footer>
   </div>
 
   <div id="toast" class="toast" style="display:none"></div>
@@ -937,6 +988,11 @@
       patterns: [],
       groups: [],
       lights: []
+    };
+    const restoreState = {
+      kind: "",
+      title: "",
+      warnings: []
     };
 
     const modalState = {
@@ -993,6 +1049,276 @@
 
     function formatOutputCount(count) {
       return `${count} ${count === 1 ? "Ausgang" : "Ausgänge"}`;
+    }
+
+    function getConfigSnapshot() {
+      return {
+        wifi: collectWifiOnly(),
+        patterns: state.patterns.map(clonePattern),
+        groups: state.groups.map(cloneGroup),
+        lights: state.lights.map(cloneLight)
+      };
+    }
+
+    function sanitizeFilenamePart(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "backup";
+    }
+
+    function normalizeBoolean(value, fallback = true) {
+      if (typeof value === "boolean") return value;
+      if (typeof value === "number") return value !== 0;
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (["true", "1", "yes", "ja", "on"].includes(normalized)) return true;
+        if (["false", "0", "no", "nein", "off"].includes(normalized)) return false;
+      }
+      return fallback;
+    }
+
+    function normalizeInteger(value, fallback = 0) {
+      const num = Number(value);
+      return Number.isFinite(num) ? Math.trunc(num) : fallback;
+    }
+
+    function pushUnknownKeys(value, allowedKeys, path, warnings) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return;
+      Object.keys(value).forEach(key => {
+        if (!allowedKeys.includes(key)) warnings.push(`${path}.${key} wird von dieser Firmware nicht verwendet`);
+      });
+    }
+
+    function renderRestoreReport() {
+      const report = $("#restore-report");
+      if (!restoreState.title && !restoreState.warnings.length) {
+        report.style.display = "none";
+        report.className = "note";
+        report.innerHTML = "";
+        return;
+      }
+
+      report.style.display = "";
+      report.className = `notice-card ${restoreState.kind || ""}`.trim();
+      const items = restoreState.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join("");
+      report.innerHTML = `<strong>${escapeHtml(restoreState.title)}</strong>${items ? `<ul>${items}</ul>` : ""}`;
+    }
+
+    function setRestoreReport(kind, title, warnings = []) {
+      restoreState.kind = kind;
+      restoreState.title = title;
+      restoreState.warnings = warnings.slice();
+      renderRestoreReport();
+    }
+
+    function clearRestoreReport() {
+      setRestoreReport("", "", []);
+    }
+
+    function normalizeImportedConfig(rawData) {
+      const warnings = [];
+      const current = getConfigSnapshot();
+
+      if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
+        throw new Error("Backup enthält kein gültiges JSON-Objekt");
+      }
+
+      let configSource = rawData;
+      if (rawData.config && typeof rawData.config === "object" && !Array.isArray(rawData.config)) {
+        pushUnknownKeys(rawData, ["backup_format", "backup_version", "created_at", "source", "config"], "backup", warnings);
+        configSource = rawData.config;
+      }
+
+      pushUnknownKeys(configSource, ["wifi", "patterns", "groups", "lights"], "config", warnings);
+
+      const normalized = {
+        wifi: current.wifi,
+        patterns: current.patterns,
+        groups: current.groups,
+        lights: current.lights
+      };
+
+      if ("wifi" in configSource) {
+        if (configSource.wifi && typeof configSource.wifi === "object" && !Array.isArray(configSource.wifi)) {
+          const wifi = configSource.wifi;
+          pushUnknownKeys(wifi, ["enabled", "mode", "ap", "sta"], "config.wifi", warnings);
+          if (wifi.ap && typeof wifi.ap === "object" && !Array.isArray(wifi.ap)) {
+            pushUnknownKeys(wifi.ap, ["ssid", "password"], "config.wifi.ap", warnings);
+          } else if ("ap" in wifi && wifi.ap != null) {
+            warnings.push("config.wifi.ap ist ungültig und wurde ignoriert");
+          }
+          if (wifi.sta && typeof wifi.sta === "object" && !Array.isArray(wifi.sta)) {
+            pushUnknownKeys(wifi.sta, ["ssid", "password"], "config.wifi.sta", warnings);
+          } else if ("sta" in wifi && wifi.sta != null) {
+            warnings.push("config.wifi.sta ist ungültig und wurde ignoriert");
+          }
+
+          const mode = String(wifi.mode || current.wifi.mode || "ap").toLowerCase();
+          normalized.wifi = {
+            enabled: normalizeBoolean(wifi.enabled, current.wifi.enabled),
+            mode: (mode === "ap" || mode === "sta") ? mode : current.wifi.mode
+          };
+          if (mode !== "ap" && mode !== "sta" && "mode" in wifi) {
+            warnings.push(`config.wifi.mode="${wifi.mode}" ist unbekannt; bestehender Wert bleibt erhalten`);
+          }
+          normalized.wifi.ap = {
+            ssid: typeof wifi.ap?.ssid === "string" ? wifi.ap.ssid : current.wifi.ap?.ssid || "",
+            password: typeof wifi.ap?.password === "string" ? wifi.ap.password : current.wifi.ap?.password || ""
+          };
+          normalized.wifi.sta = {
+            ssid: typeof wifi.sta?.ssid === "string" ? wifi.sta.ssid : current.wifi.sta?.ssid || "",
+            password: typeof wifi.sta?.password === "string" ? wifi.sta.password : current.wifi.sta?.password || ""
+          };
+        } else {
+          warnings.push("config.wifi ist ungültig; bestehende WLAN-Konfiguration bleibt erhalten");
+        }
+      } else {
+        warnings.push("config.wifi fehlt; bestehende WLAN-Konfiguration bleibt erhalten");
+      }
+
+      if ("patterns" in configSource) {
+        if (Array.isArray(configSource.patterns)) {
+          normalized.patterns = configSource.patterns.flatMap((pattern, patternIndex) => {
+            if (!pattern || typeof pattern !== "object" || Array.isArray(pattern)) {
+              warnings.push(`config.patterns[${patternIndex}] ist ungültig und wurde übersprungen`);
+              return [];
+            }
+            pushUnknownKeys(pattern, ["name", "steps"], `config.patterns[${patternIndex}]`, warnings);
+            let steps = [];
+            if (Array.isArray(pattern.steps)) {
+              steps = pattern.steps.flatMap((step, stepIndex) => {
+                if (!step || typeof step !== "object" || Array.isArray(step)) {
+                  warnings.push(`config.patterns[${patternIndex}].steps[${stepIndex}] ist ungültig und wurde übersprungen`);
+                  return [];
+                }
+                pushUnknownKeys(step, ["duration_ms", "level", "fade"], `config.patterns[${patternIndex}].steps[${stepIndex}]`, warnings);
+                const duration = normalizeInteger(step.duration_ms, 0);
+                const level = Math.max(0, Math.min(255, normalizeInteger(step.level, 0)));
+                const fade = normalizeBoolean(step.fade, false);
+                return [{ duration_ms: Math.max(0, duration), level, fade }];
+              });
+            } else if ("steps" in pattern) {
+              warnings.push(`config.patterns[${patternIndex}].steps ist ungültig; Pattern wird ohne Schritte übernommen`);
+            }
+            return [{
+              name: typeof pattern.name === "string" ? pattern.name : "",
+              steps
+            }];
+          });
+        } else {
+          warnings.push("config.patterns ist ungültig; bestehende Pattern bleiben erhalten");
+        }
+      } else {
+        warnings.push("config.patterns fehlt; bestehende Pattern bleiben erhalten");
+      }
+
+      if ("groups" in configSource) {
+        if (Array.isArray(configSource.groups)) {
+          const seenIds = new Set();
+          normalized.groups = configSource.groups.flatMap((group, groupIndex) => {
+            if (!group || typeof group !== "object" || Array.isArray(group)) {
+              warnings.push(`config.groups[${groupIndex}] ist ungültig und wurde übersprungen`);
+              return [];
+            }
+            pushUnknownKeys(group, ["id", "name", "enabled"], `config.groups[${groupIndex}]`, warnings);
+            const parsedId = Number(group.id);
+            if (!Number.isFinite(parsedId)) {
+              warnings.push(`config.groups[${groupIndex}].id ist ungültig und wurde übersprungen`);
+              return [];
+            }
+            const id = Math.trunc(parsedId);
+            if (seenIds.has(id)) {
+              warnings.push(`config.groups[${groupIndex}] verwendet die doppelte ID ${id} und wurde übersprungen`);
+              return [];
+            }
+            seenIds.add(id);
+            return [{
+              id,
+              name: typeof group.name === "string" ? group.name : "",
+              enabled: normalizeBoolean(group.enabled, true)
+            }];
+          });
+        } else {
+          warnings.push("config.groups ist ungültig; bestehende Gruppen bleiben erhalten");
+        }
+      } else {
+        warnings.push("config.groups fehlt; bestehende Gruppen bleiben erhalten");
+      }
+
+      if ("lights" in configSource) {
+        if (Array.isArray(configSource.lights)) {
+          normalized.lights = configSource.lights.flatMap((light, lightIndex) => {
+            if (!light || typeof light !== "object" || Array.isArray(light)) {
+              warnings.push(`config.lights[${lightIndex}] ist ungültig und wurde übersprungen`);
+              return [];
+            }
+            pushUnknownKeys(light, ["pin", "channel", "patternIndex", "restOverrideMs", "groupId", "phase_ms"], `config.lights[${lightIndex}]`, warnings);
+            if (!Number.isFinite(Number(light.pin))) {
+              warnings.push(`config.lights[${lightIndex}].pin ist ungültig und wurde übersprungen`);
+              return [];
+            }
+            return [{
+              pin: Math.max(0, normalizeInteger(light.pin, 0)),
+              channel: Math.max(0, normalizeInteger(light.channel, 0)),
+              patternIndex: Math.max(0, normalizeInteger(light.patternIndex, 0)),
+              restOverrideMs: normalizeInteger(light.restOverrideMs, -1),
+              groupId: normalizeInteger(light.groupId, 0),
+              phase_ms: Math.max(0, normalizeInteger(light.phase_ms, 0))
+            }];
+          });
+        } else {
+          warnings.push("config.lights ist ungültig; bestehende Ausgänge bleiben erhalten");
+        }
+      } else {
+        warnings.push("config.lights fehlt; bestehende Ausgänge bleiben erhalten");
+      }
+
+      if (normalized.patterns.length === 0) {
+        warnings.push("Die importierte Konfiguration enthält keine gültigen Pattern");
+      }
+
+      if (normalized.groups.length === 0) {
+        warnings.push("Die importierte Konfiguration enthält keine gültigen Gruppen");
+      }
+
+      normalized.lights = normalized.lights.map((light, lightIndex) => {
+        const normalizedLight = cloneLight(light);
+        if (normalized.patterns.length && normalizedLight.patternIndex >= normalized.patterns.length) {
+          warnings.push(`config.lights[${lightIndex}].patternIndex ${normalizedLight.patternIndex} existiert nicht; verwende Pattern 0`);
+          normalizedLight.patternIndex = 0;
+        }
+        if (!normalized.groups.some(group => Number(group.id) === Number(normalizedLight.groupId))) {
+          warnings.push(`config.lights[${lightIndex}].groupId ${normalizedLight.groupId} ist unbekannt; Licht bleibt trotzdem erhalten`);
+        }
+        return normalizedLight;
+      });
+
+      return { config: normalized, warnings };
+    }
+
+    function applyConfigToState(config) {
+      state.wifi = config.wifi;
+      state.patterns = config.patterns.map(clonePattern);
+      state.groups = config.groups.map(cloneGroup);
+      state.lights = config.lights.map(cloneLight);
+      renderWifi();
+      renderPatterns();
+      renderGroups();
+      renderLights();
+    }
+
+    function buildBackupPayload() {
+      return {
+        backup_format: "blaulicht-config-backup",
+        backup_version: 1,
+        created_at: new Date().toISOString(),
+        source: {
+          host: location.host || location.hostname || "device",
+          gui_path: location.pathname || "/"
+        },
+        config: getConfigSnapshot()
+      };
     }
 
     function describeGroupLights(groupId) {
@@ -1092,6 +1418,10 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&apos;");
+    }
+
+    function escapeHtml(value) {
+      return escapeXml(value).replace(/&apos;/g, "&#39;");
     }
 
     function downloadText(filename, content, type) {
@@ -1208,6 +1538,18 @@
       lines.push("</patterns>");
       downloadText("patterns.xml", lines.join("\n"), "application/xml;charset=utf-8");
       toast("Patterns als XML heruntergeladen", "ok");
+    }
+
+    function downloadConfigBackup() {
+      const payload = buildBackupPayload();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const hostPart = sanitizeFilenamePart(location.hostname || "device");
+      downloadText(`blaulicht-config-${hostPart}-${timestamp}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+      setRestoreReport("ok", "Backup heruntergeladen", [
+        "Die Datei enthält WLAN, Pattern, Gruppen und Ausgänge.",
+        "Beim späteren Restore werden unbekannte oder ungültige Felder als Warnung angezeigt."
+      ]);
+      toast("Backup heruntergeladen", "ok");
     }
 
     function parsePatternsXml(text) {
@@ -1831,6 +2173,44 @@
       }
     }
 
+    async function restoreConfigFromFile(file) {
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const { config, warnings } = normalizeImportedConfig(parsed);
+        const wifiChanged = JSON.stringify(collectWifiOnly()) !== JSON.stringify(config.wifi);
+
+        const confirmText = `Soll das Backup mit ${config.patterns.length} Pattern, ${config.groups.length} Gruppen und ${config.lights.length} Ausgängen übernommen werden?${warnings.length ? `\n\nEs gibt ${warnings.length} Warnung(en), die danach auf der Statusseite angezeigt werden.` : ""}`;
+        if (!window.confirm(confirmText)) return;
+
+        applyConfigToState(config);
+        const configSaved = await saveConfigOnly();
+        if (!configSaved) throw new Error("Die Logik-Konfiguration konnte nicht gespeichert werden");
+
+        const wifiSaved = await saveWifiOnly();
+        if (!wifiSaved) throw new Error("Die WLAN-Konfiguration konnte nicht gespeichert werden");
+
+        if (hasApplyConfig) {
+          const applyResult = await fetch("/api/config/apply", { method: "POST" });
+          if (!applyResult.ok) throw new Error("Die LED-Konfiguration konnte nicht angewendet werden");
+        }
+
+        const reportWarnings = warnings.slice();
+        if (wifiChanged) {
+          reportWarnings.push("WLAN-Daten wurden gespeichert, aber nicht automatisch neu gestartet. Nutze bei Bedarf danach \"Anwenden (WLAN)\".");
+        }
+        setRestoreReport(reportWarnings.length ? "warn" : "ok", reportWarnings.length ? "Backup mit Warnungen wiederhergestellt" : "Backup erfolgreich wiederhergestellt", reportWarnings);
+        toast(reportWarnings.length ? "Backup mit Warnungen importiert" : "Backup importiert", reportWarnings.length ? "warn" : "ok");
+        await loadAll();
+      } catch (err) {
+        const message = err?.message || String(err);
+        setRestoreReport("warn", "Backup konnte nicht vollständig wiederhergestellt werden", [message]);
+        toast(`Backup-Restore fehlgeschlagen: ${message}`, "err");
+      }
+    }
+
     document.querySelectorAll(".tab-btn").forEach(button => {
       button.addEventListener("click", () => {
         document.querySelectorAll(".tab-btn").forEach(node => node.classList.remove("active"));
@@ -1844,6 +2224,12 @@
 
     $("#btn-refresh").addEventListener("click", loadAll);
     $("#btn-reload").addEventListener("click", () => location.reload());
+    $("#btn-backup-download").addEventListener("click", downloadConfigBackup);
+    $("#btn-backup-restore").addEventListener("click", () => $("#backup-file").click());
+    $("#backup-file").addEventListener("change", async e => {
+      await restoreConfigFromFile(e.target.files?.[0]);
+      e.target.value = "";
+    });
 
     $("#wifi-enabled").addEventListener("change", e => state.wifi.enabled = (e.target.value === "true"));
     $("#wifi-mode").addEventListener("change", e => state.wifi.mode = e.target.value);
@@ -1884,6 +2270,7 @@
     });
 
     (async () => {
+      renderRestoreReport();
       await detectApis();
       await loadAll();
     })();
