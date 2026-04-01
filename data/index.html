@@ -862,6 +862,93 @@
       URL.revokeObjectURL(url);
     }
 
+    function openStaReconnectWindow() {
+      const hostName = computeExpectedHostName();
+      const targetUrl = `http://${hostName}.local`;
+      const popup = window.open("", "_blank");
+      if (!popup) {
+        toast(`Popup blockiert. Bitte nach dem WLAN-Wechsel manuell ${targetUrl} öffnen.`, "warn");
+        return;
+      }
+
+      const html = `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ESP32 neu verbinden</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --txt: #e7eef7;
+      --muted: #8ea0b5;
+      --acc: #3aa3ff;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top, #20334f, #0f1115 60%);
+      color: var(--txt);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card {
+      width: min(560px, 100%);
+      background: var(--panel);
+      border: 1px solid #28405e;
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.35);
+    }
+    h1 { margin: 0 0 10px; font-size: 1.5rem; }
+    p { color: var(--muted); line-height: 1.5; }
+    .count {
+      margin: 18px 0;
+      font-size: 3rem;
+      font-weight: 700;
+      color: var(--acc);
+    }
+    code, a {
+      color: var(--txt);
+      word-break: break-all;
+    }
+    a {
+      display: inline-block;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ESP32 wird ins WLAN übernommen</h1>
+    <p>Dieses Fenster wartet, bis der Wechsel vom Access-Point in den Clientmodus abgeschlossen ist. Danach wird automatisch der neue Hostname aufgerufen.</p>
+    <div class="count" id="count">30</div>
+    <p>Neuer Hostname: <code>${targetUrl}</code></p>
+    <a id="manual-link" href="${targetUrl}">${targetUrl}</a>
+  </div>
+  <script>
+    let remaining = 30;
+    const count = document.getElementById('count');
+    const timer = setInterval(() => {
+      remaining -= 1;
+      count.textContent = String(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+        window.location.href = ${JSON.stringify(targetUrl)};
+      }
+    }, 1000);
+  <\/script>
+</body>
+</html>`;
+      popup.document.open();
+      popup.document.write(html);
+      popup.document.close();
+    }
+
     function exportPatternsXml() {
       const lines = ['<?xml version="1.0" encoding="UTF-8"?>', "<patterns>"];
       state.patterns.forEach(pattern => {
@@ -1387,6 +1474,10 @@
     }
 
     async function applyWifiOnly() {
+      const shouldOpenStaWindow = state.wifi.mode === "sta" && String(state.wifi.enabled) !== "false";
+      if (shouldOpenStaWindow) {
+        openStaReconnectWindow();
+      }
       if (hasApplyWifi) {
         const r = await fetch("/api/wifi/apply", { method: "POST" });
         if (!r.ok) { toast("Anwenden (WLAN) fehlgeschlagen", "err"); return; }
