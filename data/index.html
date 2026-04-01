@@ -1342,11 +1342,18 @@
       const r = await fetch("/api/sysinfo");
       if (!r.ok) { $("#sysinfo").textContent = "–"; return; }
       const s = await r.json();
+      const heapKb = Math.round((Number(s.heap_free_bytes || 0) / 1024) * 10) / 10;
+      const fsUsedKb = Math.round((Number(s.fs_used_bytes || 0) / 1024) * 10) / 10;
+      const fsFreeKb = Math.round((Number(s.fs_free_bytes || 0) / 1024) * 10) / 10;
+      const fsTotalKb = Math.round((Number(s.fs_total_bytes || 0) / 1024) * 10) / 10;
       $("#sysinfo").innerHTML = `
         <strong>Board:</strong> ${s.board_name || "?"} <span class="muted">(${s.max_led_outputs || "?"} LED-Ausgänge)</span><br>
         <strong>LEDC:</strong> ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle: ${s.max_ledc_channels}<br>
         <strong>Ausgänge konfiguriert:</strong> ${s.num_lights} von ${s.max_led_outputs} möglichen<br>
-        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || "?"}
+        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || "?"}<br>
+        <strong>Freier Heap:</strong> ${heapKb} KB<br>
+        <strong>LittleFS:</strong> ${fsUsedKb} KB belegt / ${fsTotalKb} KB gesamt<br>
+        <strong>LittleFS frei:</strong> ${fsFreeKb} KB
       `;
     }
 

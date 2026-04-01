@@ -719,6 +719,8 @@ static void startServerRoutes() {
 
   server.on("/api/sysinfo", HTTP_GET, [](){
     JsonDocument doc;
+    size_t totalBytes = LittleFS.totalBytes();
+    size_t usedBytes  = LittleFS.usedBytes();
     doc["board_name"]        = BOARD_NAME;
     doc["max_led_outputs"]   = DEFAULT_LED_OUTPUTS;
     doc["max_pwm_channels"]  = MAX_LEDC_CHANNELS;
@@ -727,6 +729,10 @@ static void startServerRoutes() {
     doc["ledc_res_bits"]     = LEDC_RES_BITS;
     doc["num_lights"]        = (uint32_t)lights.size();
     doc["reset_pin"]         = RESET_WIFI_PIN;
+    doc["heap_free_bytes"]   = ESP.getFreeHeap();
+    doc["fs_total_bytes"]    = (uint32_t)totalBytes;
+    doc["fs_used_bytes"]     = (uint32_t)usedBytes;
+    doc["fs_free_bytes"]     = (uint32_t)(totalBytes >= usedBytes ? (totalBytes - usedBytes) : 0U);
     String out; serializeJson(doc, out);
     sendJSON(out);
   });
