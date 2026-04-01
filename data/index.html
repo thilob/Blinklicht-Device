@@ -332,6 +332,22 @@
       color: var(--muted)
     }
 
+    .entity-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px
+    }
+
+    .entity-link {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #2c4f78;
+      background: #11151b;
+      color: var(--txt);
+      cursor: pointer
+    }
+
     .steps-preview {
       display: grid;
       gap: 6px;
@@ -830,6 +846,28 @@
       return `${steps.length} Schritt(e), Gesamtdauer ${total} ms`;
     }
 
+    function describeGroupLights(groupId) {
+      const assigned = state.lights
+        .map((light, idx) => ({ light, idx }))
+        .filter(entry => Number(entry.light.groupId) === Number(groupId));
+      if (!assigned.length) return "Keine Ausgänge zugeordnet";
+      return assigned
+        .map(({ light, idx }) => `#${idx} GPIO ${light.pin}`)
+        .join(", ");
+    }
+
+    function getGroupLights(groupId) {
+      return state.lights
+        .map((light, idx) => ({ light, idx }))
+        .filter(entry => Number(entry.light.groupId) === Number(groupId));
+    }
+
+    function getGroupLabel(groupId) {
+      const group = state.groups.find(entry => Number(entry.id) === Number(groupId));
+      if (!group) return `Gruppe ${groupId}`;
+      return group.name ? `Gruppe ${groupId} (${group.name})` : `Gruppe ${groupId}`;
+    }
+
     function computeExpectedHostName() {
       const fallback = "blaulicht";
       const base = (state.wifi?.ap?.ssid || "").trim() || location.hostname || fallback;
@@ -1220,14 +1258,17 @@
         value: idx, label: `[${idx}] ${pattern.name || "(ohne Namen)"}`
       })), working.patternIndex);
       const restInput = el("input"); restInput.type = "number"; restInput.value = working.restOverrideMs;
-      const groupInput = el("input"); groupInput.type = "number"; groupInput.value = working.groupId;
+      const groupInput = el("select");
+      fillSelectOptions(groupInput, state.groups.map(group => ({
+        value: group.id, label: getGroupLabel(group.id)
+      })), working.groupId);
       const phaseInput = el("input"); phaseInput.type = "number"; phaseInput.value = working.phase_ms;
 
       pinInput.addEventListener("input", () => working.pin = Number(pinInput.value || 0));
       chInput.addEventListener("input", () => working.channel = Number(chInput.value || 0));
       patternSelect.addEventListener("change", () => working.patternIndex = Number(patternSelect.value || 0));
       restInput.addEventListener("input", () => working.restOverrideMs = Number(restInput.value || -1));
-      groupInput.addEventListener("input", () => working.groupId = Number(groupInput.value || 0));
+      groupInput.addEventListener("change", () => working.groupId = Number(groupInput.value || 0));
       phaseInput.addEventListener("input", () => working.phase_ms = Number(phaseInput.value || 0));
 
       content.append(
@@ -1246,6 +1287,7 @@
         onSave: () => {
           if (index >= 0) state.lights[index] = working;
           else state.lights.push(working);
+          renderGroups();
           renderLights();
           toast(index >= 0 ? "Ausgang aktualisiert" : "Ausgang angelegt", "ok");
         }
@@ -1376,8 +1418,20 @@
         item.appendChild(el("div", "pill", group.id));
 
         const body = el("div", "entity-meta");
+        const assignedLights = getGroupLights(group.id);
         body.appendChild(el("div", "entity-title", group.name || `Gruppe ${group.id}`));
         body.appendChild(el("div", "entity-copy", `enabled: ${group.enabled ? "true" : "false"}`));
+        body.appendChild(el("div", "entity-copy", `Ausgänge: ${describeGroupLights(group.id)}`));
+        if (assignedLights.length) {
+          const links = el("div", "entity-links");
+          assignedLights.forEach(({ light, idx: lightIndex }) => {
+            const jumpBtn = el("button", "entity-link", `Ausgang #${lightIndex} (GPIO ${light.pin})`);
+            jumpBtn.type = "button";
+            jumpBtn.addEventListener("click", () => openLightModal(lightIndex));
+            links.appendChild(jumpBtn);
+          });
+          body.appendChild(links);
+        }
         item.appendChild(body);
 
         const actions = el("div", "row item-actions");
@@ -1405,9 +1459,10 @@
         item.appendChild(el("div", "pill", idx));
 
         const patternName = state.patterns[Number(light.patternIndex)]?.name || `Pattern ${Number(light.patternIndex || 0)}`;
+        const groupLabel = getGroupLabel(light.groupId);
         const body = el("div", "entity-meta");
         body.appendChild(el("div", "entity-title", `GPIO ${light.pin}, Kanal ${light.channel}`));
-        body.appendChild(el("div", "entity-copy", `${patternName}, Gruppe ${light.groupId}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
+        body.appendChild(el("div", "entity-copy", `${patternName}, ${groupLabel}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
         item.appendChild(body);
 
         const actions = el("div", "row item-actions");
@@ -1417,6 +1472,7 @@
         delBtn.addEventListener("click", () => {
           if (!confirmDelete(`Ausgang ${idx} (GPIO ${light.pin})`)) return;
           state.lights.splice(idx, 1);
+          renderGroups();
           renderLights();
         });
         actions.append(editBtn, delBtn);
