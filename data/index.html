@@ -344,6 +344,32 @@
       margin-top: 6px
     }
 
+    .entity-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 2px
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid rgba(59, 209, 127, .35);
+      background: rgba(31, 97, 57, .22);
+      color: #8de6af
+    }
+
+    .status-chip.off {
+      border-color: rgba(244, 172, 54, .35);
+      background: rgba(127, 85, 24, .18);
+      color: #f2c46a
+    }
+
     .switch-row {
       display: inline-flex;
       align-items: center;
@@ -1571,19 +1597,30 @@
 
       state.groups.forEach((group, idx) => {
         const item = el("div", "item");
+        const accent = getGroupAccent(group.id);
+        item.style.borderLeft = `4px solid ${accent.border}`;
+        item.style.background = `linear-gradient(90deg, ${accent.bgStrong}, ${accent.bgSoft} 18%, transparent 45%)`;
         item.appendChild(el("div", "pill", group.id));
 
         const body = el("div", "entity-meta");
         const assignedLights = getGroupLights(group.id);
         body.appendChild(el("div", "entity-title", group.name || `Gruppe ${group.id}`));
-        body.appendChild(el("div", "entity-copy", `enabled: ${group.enabled ? "true" : "false"}`));
-        body.appendChild(el("div", "entity-copy", `Ausgänge: ${describeGroupLights(group.id)}`));
+        const tags = el("div", "entity-tags");
+        const statusChip = el("div", `status-chip${group.enabled ? "" : " off"}`, group.enabled ? "Aktiv" : "Deaktiviert");
+        statusChip.style.borderColor = group.enabled ? accent.border : "";
+        statusChip.style.background = group.enabled ? accent.bgSoft : "";
+        statusChip.style.color = group.enabled ? accent.text : "";
+        tags.appendChild(statusChip);
+        tags.appendChild(el("div", "group-chip", `${assignedLights.length} Ausgang${assignedLights.length === 1 ? "" : "e"}`));
+        body.appendChild(tags);
+        body.appendChild(el("div", "entity-copy", `Zugeordnet: ${describeGroupLights(group.id)}`));
         const switchRow = el("div", "switch-row");
         switchRow.appendChild(el("span", "switch-label", group.enabled ? "Aktiv" : "Deaktiviert"));
         const toggle = el("label", "switch");
         const toggleInput = document.createElement("input");
         toggleInput.type = "checkbox";
         toggleInput.checked = !!group.enabled;
+        toggleInput.setAttribute("aria-label", `Gruppe ${group.name || group.id} ${group.enabled ? "deaktivieren" : "aktivieren"}`);
         const toggleSlider = el("span", "switch-slider");
         toggleInput.addEventListener("change", () => {
           group.enabled = toggleInput.checked;
