@@ -344,6 +344,62 @@
       margin-top: 6px
     }
 
+    .switch-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px
+    }
+
+    .switch-label {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .switch {
+      position: relative;
+      display: inline-flex;
+      width: 54px;
+      height: 30px
+    }
+
+    .switch input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none
+    }
+
+    .switch-slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: #28303d;
+      border: 1px solid #394454;
+      transition: all .2s ease
+    }
+
+    .switch-slider::before {
+      content: "";
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: #f1f5fb;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+      transition: transform .2s ease
+    }
+
+    .switch input:checked + .switch-slider {
+      background: linear-gradient(90deg, #28b463, #2ecc71);
+      border-color: #4be18d
+    }
+
+    .switch input:checked + .switch-slider::before {
+      transform: translateX(24px)
+    }
+
     .entity-links {
       display: flex;
       flex-wrap: wrap;
@@ -749,7 +805,6 @@
         <h3 style="margin:0">Gruppen</h3>
         <div class="toolbar">
           <button class="btn btn-acc" id="btn-grp-add">＋ Gruppe</button>
-          <button class="btn" id="btn-grp-save">💾 Speichern</button>
           <button class="btn btn-ok" id="btn-grp-apply">▶ Anwenden (LEDs)</button>
         </div>
       </div>
@@ -1523,6 +1578,20 @@
         body.appendChild(el("div", "entity-title", group.name || `Gruppe ${group.id}`));
         body.appendChild(el("div", "entity-copy", `enabled: ${group.enabled ? "true" : "false"}`));
         body.appendChild(el("div", "entity-copy", `Ausgänge: ${describeGroupLights(group.id)}`));
+        const switchRow = el("div", "switch-row");
+        switchRow.appendChild(el("span", "switch-label", group.enabled ? "Aktiv" : "Deaktiviert"));
+        const toggle = el("label", "switch");
+        const toggleInput = document.createElement("input");
+        toggleInput.type = "checkbox";
+        toggleInput.checked = !!group.enabled;
+        const toggleSlider = el("span", "switch-slider");
+        toggleInput.addEventListener("change", () => {
+          group.enabled = toggleInput.checked;
+          renderGroups();
+        });
+        toggle.append(toggleInput, toggleSlider);
+        switchRow.appendChild(toggle);
+        body.appendChild(switchRow);
         if (assignedLights.length) {
           const links = el("div", "entity-links");
           assignedLights.forEach(({ light, idx: lightIndex }) => {
@@ -1565,7 +1634,7 @@
         const patternName = state.patterns[Number(light.patternIndex)]?.name || `Pattern ${Number(light.patternIndex || 0)}`;
         const groupLabel = getGroupLabel(light.groupId);
         const body = el("div", "entity-meta");
-        body.appendChild(el("div", "entity-title", `GPIO ${light.pin}, Kanal ${light.channel}`));
+        body.appendChild(el("div", "entity-title", `GPIO ${light.pin}, Kanal ${light.channel} • ${groupLabel}`));
         body.appendChild(el("div", "entity-copy", `${patternName}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
         const groupChip = el("div", "group-chip", groupLabel);
         groupChip.style.borderColor = accent.border;
@@ -1722,7 +1791,6 @@
     $("#btn-pat-apply").addEventListener("click", applyConfigOnly);
 
     $("#btn-grp-add").addEventListener("click", () => openGroupModal());
-    $("#btn-grp-save").addEventListener("click", saveConfigOnly);
     $("#btn-grp-apply").addEventListener("click", applyConfigOnly);
 
     $("#btn-light-add").addEventListener("click", () => openLightModal());
