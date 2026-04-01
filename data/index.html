@@ -811,6 +811,19 @@
       });
     }
 
+    function getNextGroupId() {
+      if (!Array.isArray(state.groups) || state.groups.length === 0) return 0;
+      return state.groups.reduce((maxId, g) => Math.max(maxId, Number(g.id) || 0), -1) + 1;
+    }
+
+    function refreshNextGroupId() {
+      const input = $("#grp-new-id");
+      if (!input) return;
+      const nextId = getNextGroupId();
+      input.placeholder = String(nextId);
+      if (!input.value.trim()) input.value = String(nextId);
+    }
+
     function renderGroups() {
       const box = $("#grp-list");
       box.querySelectorAll(".item").forEach(n => n.remove());
@@ -858,6 +871,8 @@
 
         box.appendChild(it);
       });
+
+      refreshNextGroupId();
     }
 
     function renderLights() {
@@ -1036,7 +1051,8 @@
 
     // Groups toolbar
     $("#btn-grp-add").addEventListener("click", () => {
-      const id = Number($("#grp-new-id").value || 0);
+      const rawId = $("#grp-new-id").value.trim();
+      const id = rawId === "" ? getNextGroupId() : Number(rawId);
       const name = $("#grp-new-name").value.trim() || ("Gruppe " + id);
       state.groups.push({ id, name, enabled: true });
       $("#grp-new-id").value = ""; $("#grp-new-name").value = "";
