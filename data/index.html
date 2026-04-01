@@ -416,6 +416,21 @@
       display: none !important
     }
 
+    .info-box {
+      border: 1px solid #2c4f78;
+      background: linear-gradient(180deg, rgba(45, 87, 133, .22), rgba(20, 31, 46, .88));
+      border-radius: 12px;
+      padding: 14px
+    }
+
+    .info-box h4 {
+      margin: 0 0 8px
+    }
+
+    .info-box p {
+      margin: 0 0 8px
+    }
+
     @media(max-width:700px) {
       .wrap {
         padding: 12px
@@ -603,6 +618,12 @@
       <div class="toolbar">
         <button class="btn" id="btn-wifi-save">💾 Speichern</button>
         <button class="btn btn-ok" id="btn-wifi-apply">▶ Anwenden (WLAN)</button>
+      </div>
+      <div id="sta-hostinfo" class="info-box" style="margin-top:12px">
+        <h4>Hinweis für Clientmodus</h4>
+        <p>Nach dem Wechsel in den WLAN-Clientmodus findest du den ESP32 im Zielnetz über folgenden Hostnamen:</p>
+        <p><strong id="sta-hostname">blaulicht.local</strong></p>
+        <p class="note">Im Browser meist erreichbar über <code id="sta-hosturl">http://blaulicht.local</code>. Falls mDNS im Netzwerk nicht aufgelöst wird, prüfe die im Router vergebene DHCP-IP.</p>
       </div>
       <p class="note" id="wifi-warning" style="margin-top:8px"></p>
     </section>
@@ -807,6 +828,17 @@
       if (!steps.length) return "Noch keine Schritte";
       const total = steps.reduce((sum, step) => sum + Number(step.duration_ms || 0), 0);
       return `${steps.length} Schritt(e), Gesamtdauer ${total} ms`;
+    }
+
+    function computeExpectedHostName() {
+      const fallback = "blaulicht";
+      const base = (state.wifi?.ap?.ssid || "").trim() || location.hostname || fallback;
+      const normalized = base
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/^-+|-+$/g, "");
+      return normalized || fallback;
     }
 
     function escapeXml(value) {
@@ -1178,6 +1210,10 @@
       $("#ap-pass").value = state.wifi.ap?.password || "";
       $("#sta-ssid").value = state.wifi.sta?.ssid || "";
       $("#sta-pass").value = state.wifi.sta?.password || "";
+      const hostName = computeExpectedHostName();
+      $("#sta-hostname").textContent = `${hostName}.local`;
+      $("#sta-hosturl").textContent = `http://${hostName}.local`;
+      $("#sta-hostinfo").style.display = state.wifi.mode === "sta" ? "" : "none";
       $("#wifi-warning").textContent = hasWifiAPI ? "" : "Warnung: getrennte WLAN-Endpunkte nicht verfügbar – Speichern kann einen WLAN-Neustart auslösen.";
     }
 
