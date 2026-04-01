@@ -2,46 +2,52 @@
 
 ## Übersicht
 
-Dieses Projekt unterstützt verschiedene ESP32-Boards mit unterschiedlichen Pin-Konfigurationen und Ausgängen. Die Board-Konfiguration erfolgt automatisch basierend auf dem gewählten PlatformIO Environment.
+Dieses Projekt unterstützt verschiedene ESP32-Boards mit unterschiedlichen Pin-Konfigurationen. Die Board-Konfiguration erfolgt automatisch basierend auf dem gewählten PlatformIO Environment. Die maximal gleichzeitig nutzbaren PWM-Ausgaenge richten sich nach den LEDC-Kanaelen der jeweiligen ESP32-Zielhardware.
 
 ## Unterstützte Boards
 
 ### ESP32 DevKit (Standard)
 - **Environment:** `esp32dev`
 - **Alias:** `devkit-v1`
-- **Ausgänge:** 10 LEDs
+- **Vorkonfigurierte Ausgänge:** 10 LEDs
+- **Max. gleichzeitige PWM-Kanaele:** 16
 - **Pins:** GPIO 16, 17, 18, 19, 21, 22, 23, 25, 26, 27
 - **Reset Pin:** GPIO 34
 
 ### ESP32-C3 DevKit M1
 - **Environment:** `esp32-c3-devkitm-1`
-- **Ausgänge:** 8 LEDs
+- **Vorkonfigurierte Ausgänge:** 8 LEDs
+- **Max. gleichzeitige PWM-Kanaele:** 8
 - **Pins:** GPIO 2, 3, 4, 5, 6, 7, 8, 9
 - **Reset Pin:** GPIO 10
 - **Hinweis:** GPIO 0,1 für USB reserviert
 
 ### ESP32-C3 Super Mini
 - **Environment:** `esp32c3-super-mini`
-- **Ausgänge:** 8 LEDs
+- **Vorkonfigurierte Ausgänge:** 8 LEDs
+- **Max. gleichzeitige PWM-Kanaele:** 8
 - **Pins:** GPIO 2, 3, 4, 5, 6, 7, 8, 9
 - **Reset Pin:** GPIO 10
 - **Hinweis:** Sehr kompaktes Board
 
 ### WiFiduino32 C3
 - **Environment:** `wifiduino32c3`
-- **Ausgänge:** 10 LEDs
+- **Vorkonfigurierte Ausgänge:** 8 LEDs
+- **Hinweis:** 10 Pins sind hinterlegt, aber der ESP32-C3 stellt gleichzeitig nur 8 LEDC-PWM-Kanaele bereit.
 - **Pins:** GPIO 2, 3, 4, 5, 6, 7, 8, 9, 10, 18
 - **Reset Pin:** GPIO 19
 
 ### ESP32-S2 Mini
 - **Environment:** `esp32s2-mini`
-- **Ausgänge:** 12 LEDs
+- **Vorkonfigurierte Ausgänge:** 8 LEDs
+- **Hinweis:** 12 Pins sind hinterlegt, gleichzeitig nutzbar sind aber 8 LEDC-PWM-Kanaele.
 - **Pins:** GPIO 1-12
 - **Reset Pin:** GPIO 0
 
 ### ESP32-S3 DevKit
 - **Environment:** `esp32s3-devkit`
-- **Ausgänge:** 16 LEDs
+- **Vorkonfigurierte Ausgänge:** 8 LEDs
+- **Hinweis:** 16 Pins sind hinterlegt, gleichzeitig nutzbar sind aber 8 LEDC-PWM-Kanaele.
 - **Pins:** GPIO 1-16
 - **Reset Pin:** GPIO 0
 - **Hinweis:** Mehr GPIOs verfügbar
@@ -90,9 +96,8 @@ Reset Pin:     GPIO 34
 ```cpp
 #elif defined(BOARD_MEIN_BOARD)
   #define BOARD_NAME "Mein Custom Board"
-  #define NUM_LED_OUTPUTS 6
-  
-  static const int LED_PINS[NUM_LED_OUTPUTS] = {
+
+  static const int LED_PINS[] = {
     13, 14, 15, 16, 17, 18  // Deine Pins
   };
   

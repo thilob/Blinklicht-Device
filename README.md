@@ -1,13 +1,13 @@
 # ESP32 Blaulicht-Controller mit Web-UI & CLI
 
 Dieses Projekt ist ein **Blaulicht-Controller für Modellbau und ähnliche Anwendungen**.  
-Die Software läuft auf einem ESP32-DevKit und steuert bis zu **8 LEDs (Blaulichter)** über PWM-Ausgänge.  
+Die Software läuft auf verschiedenen ESP32-Boards und nutzt die jeweils vorhandenen **LEDC-PWM-Kanäle** der Zielhardware.  
 
 ---
 
 ## Features
 
-- Bis zu **8 Ausgänge** (PWM, LEDC-Hardware des ESP32, 5 kHz, 8 Bit Helligkeit)  
+- Bis zur **hardwareabhaengigen LEDC-Grenze** des jeweiligen ESP32-Ziels (PWM, 5 kHz, 8 Bit Helligkeit)  
 - **Mehrere Blinkmuster (Patterns)**, die frei definierbar sind  
 - **Gruppen-Funktion**: LEDs lassen sich zu Gruppen zusammenfassen und gemeinsam ein-/ausschalten  
 - **Phasenverschiebung**: gleiche Muster können zeitlich versetzt starten  
@@ -26,7 +26,9 @@ Die Software läuft auf einem ESP32-DevKit und steuert bis zu **8 LEDs (Blaulich
 - Verwendet wird ein Standard-ESP32-DevKit (mit USB-Anschluss und Spannungsregler).  
 
 ### LED-Ausgänge
-- Bis zu 8 Pins frei wählbar (z. B. GPIO21, 22, 18, 19, 23, 25, 26, 27).  
+- PWM ist nicht auf "ein paar Spezialpins" begrenzt, sondern kann auf viele ausgabefaehige GPIOs gemappt werden.  
+- Die eigentliche Grenze ist die Anzahl gleichzeitig verfuegbarer **LEDC-Kanaele** der jeweiligen ESP32-Variante.  
+- Das Projekt begrenzt die Standard-Konfiguration automatisch auf die LEDC-Kapazitaet der gewaehlten Zielhardware.  
 - Jeder Ausgang steuert eine LED oder LED-Baugruppe.  
 - Vor jede LED gehört ein **Vorwiderstand** (typisch 220–470 Ω bei 5 V Betrieb).  
 

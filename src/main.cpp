@@ -238,7 +238,7 @@ private:
   }
 };
 
-static PatternPlayer players[8];
+static std::vector<PatternPlayer> players;
 
 /// -------------------- Persistenz --------------------
 static bool saveConfig() {
@@ -384,14 +384,14 @@ static void makeDefaultConfig() {
 
   // Automatisch Lights basierend auf Board-Konfiguration erstellen
   lights.clear();
-  for (int i = 0; i < NUM_LED_OUTPUTS; ++i) {
+  for (size_t i = 0; i < DEFAULT_LED_OUTPUTS; ++i) {
     LightCfg L;
     L.pin = LED_PINS[i];
-    L.channel = i;
+    L.channel = (uint8_t)i;
     L.patternIndex = (i % 2 == 0) ? 0 : 1;  // Abwechselnd Pattern 0 und 1
     L.restOverrideMs = -1;
-    L.groupId = (i < NUM_LED_OUTPUTS / 2) ? 0 : 1;  // Vordere Hälfte = Front, Rest = Heck
-    L.phase_ms = i * 50;  // Phasenverschiebung
+    L.groupId = (i < DEFAULT_LED_OUTPUTS / 2) ? 0 : 1;  // Vordere Hälfte = Front, Rest = Heck
+    L.phase_ms = (int)(i * 50);  // Phasenverschiebung
     lights.push_back(L);
   }
 }
@@ -411,11 +411,16 @@ static void setupHardware() {
 
 /// Player binden & starten (getrennt von Hardware-Setup)
 static void startPlayers() {
-  size_t n = min<size_t>(8, lights.size());
-  for (size_t i = 0; i < n; ++i) {
-    players[i].attach(lights[i].channel);
-    players[i].bind((int)i);
-    players[i].begin();
+  players.clear();
+  players.reserve(min<size_t>(lights.size(), MAX_LEDC_CHANNELS));
+
+  for (size_t i = 0; i < lights.size(); ++i) {
+    if (lights[i].channel >= MAX_LEDC_CHANNELS) continue;
+    PatternPlayer player;
+    player.attach(lights[i].channel);
+    player.bind((int)i);
+    player.begin();
+    players.push_back(std::move(player));
   }
 }
 
@@ -696,7 +701,8 @@ static void startServerRoutes() {
   server.on("/api/sysinfo", HTTP_GET, [](){
     JsonDocument doc;
     doc["board_name"]        = BOARD_NAME;
-    doc["max_led_outputs"]   = NUM_LED_OUTPUTS;
+    doc["max_led_outputs"]   = DEFAULT_LED_OUTPUTS;
+    doc["max_pwm_channels"]  = MAX_LEDC_CHANNELS;
     doc["max_ledc_channels"] = MAX_LEDC_CHANNELS;
     doc["ledc_freq_hz"]      = LEDC_FREQ_HZ;
     doc["ledc_res_bits"]     = LEDC_RES_BITS;
@@ -1078,7 +1084,7 @@ void setup() {
   Serial.println("Blaulicht-Controller (Multi-Board)");
   Serial.println("========================================");
   Serial.printf("Board:         %s\n", BOARD_NAME);
-  Serial.printf("LED Ausgänge:  %d\n", NUM_LED_OUTPUTS);
+  Serial.printf("LED Ausgänge:  %u\n", (unsigned)DEFAULT_LED_OUTPUTS);
   Serial.printf("LEDC Kanäle:   %u\n", MAX_LEDC_CHANNELS);
   Serial.printf("Reset Pin:     GPIO %d\n", RESET_WIFI_PIN);
   Serial.println("========================================");
@@ -1135,8 +1141,7 @@ void loop() {
   }
 
   if (systemReady) {
-    size_t n = min<size_t>(8, lights.size());
-    for (size_t i = 0; i < n; ++i) players[i].update();
+    for (auto &player : players) player.update();
   }
 
   cliPoll();
