@@ -1650,7 +1650,6 @@
         body.appendChild(tags);
         body.appendChild(el("div", "entity-copy", `Zugeordnet: ${describeGroupLights(group.id)}`));
         const switchRow = el("div", "switch-row");
-        switchRow.appendChild(el("span", "switch-label", togglePending ? "Wird aktualisiert..." : (group.enabled ? "Aktiv" : "Deaktiviert")));
         const toggle = el("label", "switch");
         toggle.style.cursor = togglePending ? "progress" : "pointer";
         const toggleInput = document.createElement("input");
@@ -1666,6 +1665,7 @@
         });
         toggle.append(toggleInput, toggleSlider);
         switchRow.appendChild(toggle);
+        switchRow.appendChild(el("span", "switch-label", togglePending ? "Wird aktualisiert..." : (group.enabled ? "Aktiv" : "Deaktiviert")));
         body.appendChild(switchRow);
         if (assignedLights.length) {
           const links = el("div", "entity-links");
