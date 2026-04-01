@@ -841,6 +841,23 @@
       return normalized || fallback;
     }
 
+    function getReconnectTarget() {
+      if (state.wifi.mode === "sta" && String(state.wifi.enabled) !== "false") {
+        const hostName = computeExpectedHostName();
+        return {
+          modeLabel: "Clientmodus",
+          targetUrl: `http://${hostName}.local`,
+          helperText: "Nach dem Wechsel in den WLAN-Clientmodus wird der ESP32 im Zielnetz unter diesem Hostnamen gesucht."
+        };
+      }
+
+      return {
+        modeLabel: "Access-Point-Modus",
+        targetUrl: "http://192.168.4.1",
+        helperText: "Nach dem Neustart des WLANs wird wieder der lokale Access Point des ESP32 aufgerufen."
+      };
+    }
+
     function escapeXml(value) {
       return String(value)
         .replace(/&/g, "&amp;")
@@ -862,9 +879,9 @@
       URL.revokeObjectURL(url);
     }
 
-    function openStaReconnectWindow() {
-      const hostName = computeExpectedHostName();
-      const targetUrl = `http://${hostName}.local`;
+    function openReconnectWindow() {
+      const reconnect = getReconnectTarget();
+      const targetUrl = reconnect.targetUrl;
       const popup = window.open("", "_blank");
       if (!popup) {
         toast(`Popup blockiert. Bitte nach dem WLAN-Wechsel manuell ${targetUrl} öffnen.`, "warn");
@@ -924,10 +941,11 @@
 </head>
 <body>
   <div class="card">
-    <h1>ESP32 wird ins WLAN übernommen</h1>
-    <p>Dieses Fenster wartet, bis der Wechsel vom Access-Point in den Clientmodus abgeschlossen ist. Danach wird automatisch der neue Hostname aufgerufen.</p>
+    <h1>ESP32 verbindet sich neu</h1>
+    <p>Dieses Fenster wartet, bis die WLAN-Umstellung abgeschlossen ist. Danach wird automatisch das passende Ziel für den ${reconnect.modeLabel} aufgerufen.</p>
     <div class="count" id="count">30</div>
-    <p>Neuer Hostname: <code>${targetUrl}</code></p>
+    <p>${reconnect.helperText}</p>
+    <p>Zieladresse: <code>${targetUrl}</code></p>
     <a id="manual-link" href="${targetUrl}">${targetUrl}</a>
   </div>
   <script>
@@ -1474,9 +1492,8 @@
     }
 
     async function applyWifiOnly() {
-      const shouldOpenStaWindow = state.wifi.mode === "sta" && String(state.wifi.enabled) !== "false";
-      if (shouldOpenStaWindow) {
-        openStaReconnectWindow();
+      if (String(state.wifi.enabled) !== "false") {
+        openReconnectWindow();
       }
       if (hasApplyWifi) {
         const r = await fetch("/api/wifi/apply", { method: "POST" });
