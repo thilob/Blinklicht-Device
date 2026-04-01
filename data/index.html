@@ -930,6 +930,7 @@
     let hasWifiAPI = false;
     let hasApplyConfig = false;
     let hasApplyWifi = false;
+    const pendingGroupToggleIds = new Set();
 
     const state = {
       wifi: { enabled: true, mode: "ap", ap: { ssid: "", password: "" }, sta: { ssid: "", password: "" } },
@@ -959,7 +960,7 @@
       return {
         id: Number(group.id || 0),
         name: group.name || "",
-        enabled: group.enabled !== false
+        enabled: String(group.enabled) !== "false"
       };
     }
 
@@ -988,6 +989,10 @@
       if (!steps.length) return "Noch keine Schritte";
       const total = steps.reduce((sum, step) => sum + Number(step.duration_ms || 0), 0);
       return `${steps.length} Schritt(e), Gesamtdauer ${total} ms`;
+    }
+
+    function formatOutputCount(count) {
+      return `${count} ${count === 1 ? "Ausgang" : "Ausgänge"}`;
     }
 
     function describeGroupLights(groupId) {
@@ -1021,6 +1026,35 @@
         bgStrong: `hsla(${hue}, 85%, 55%, 0.2)`,
         text: `hsl(${hue}, 90%, 84%)`
       };
+    }
+
+    async function persistGroupToggle(groupIndex, nextEnabled) {
+      const group = state.groups[groupIndex];
+      if (!group) return;
+
+      const previousEnabled = !!group.enabled;
+      const groupKey = Number(group.id);
+      group.enabled = !!nextEnabled;
+      pendingGroupToggleIds.add(groupKey);
+      renderGroups();
+
+      try {
+        const saved = await saveConfigOnly();
+        if (!saved) throw new Error("save_failed");
+
+        if (hasApplyConfig) {
+          const r = await fetch("/api/config/apply", { method: "POST" });
+          if (!r.ok) throw new Error("apply_failed");
+        }
+
+        toast(`Gruppe ${group.name || group.id} ${group.enabled ? "aktiviert" : "deaktiviert"}`, "ok");
+      } catch (_) {
+        group.enabled = previousEnabled;
+        toast(`Gruppe ${group.name || group.id} konnte nicht umgeschaltet werden`, "err");
+      } finally {
+        pendingGroupToggleIds.delete(groupKey);
+        renderGroups();
+      }
     }
 
     function computeExpectedHostName() {
@@ -1598,6 +1632,7 @@
       state.groups.forEach((group, idx) => {
         const item = el("div", "item");
         const accent = getGroupAccent(group.id);
+        const togglePending = pendingGroupToggleIds.has(Number(group.id));
         item.style.borderLeft = `4px solid ${accent.border}`;
         item.style.background = `linear-gradient(90deg, ${accent.bgStrong}, ${accent.bgSoft} 18%, transparent 45%)`;
         item.appendChild(el("div", "pill", group.id));
@@ -1611,20 +1646,23 @@
         statusChip.style.background = group.enabled ? accent.bgSoft : "";
         statusChip.style.color = group.enabled ? accent.text : "";
         tags.appendChild(statusChip);
-        tags.appendChild(el("div", "group-chip", `${assignedLights.length} Ausgang${assignedLights.length === 1 ? "" : "e"}`));
+        tags.appendChild(el("div", "group-chip", formatOutputCount(assignedLights.length)));
         body.appendChild(tags);
         body.appendChild(el("div", "entity-copy", `Zugeordnet: ${describeGroupLights(group.id)}`));
         const switchRow = el("div", "switch-row");
-        switchRow.appendChild(el("span", "switch-label", group.enabled ? "Aktiv" : "Deaktiviert"));
+        switchRow.appendChild(el("span", "switch-label", togglePending ? "Wird aktualisiert..." : (group.enabled ? "Aktiv" : "Deaktiviert")));
         const toggle = el("label", "switch");
+        toggle.style.cursor = togglePending ? "progress" : "pointer";
         const toggleInput = document.createElement("input");
         toggleInput.type = "checkbox";
         toggleInput.checked = !!group.enabled;
+        toggleInput.disabled = togglePending;
         toggleInput.setAttribute("aria-label", `Gruppe ${group.name || group.id} ${group.enabled ? "deaktivieren" : "aktivieren"}`);
         const toggleSlider = el("span", "switch-slider");
-        toggleInput.addEventListener("change", () => {
-          group.enabled = toggleInput.checked;
-          renderGroups();
+        if (togglePending) toggleSlider.style.opacity = ".7";
+        toggleInput.addEventListener("change", (event) => {
+          event.stopPropagation();
+          persistGroupToggle(idx, toggleInput.checked);
         });
         toggle.append(toggleInput, toggleSlider);
         switchRow.appendChild(toggle);
