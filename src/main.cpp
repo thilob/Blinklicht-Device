@@ -615,21 +615,27 @@ static void handlePutWifi() {
   DeserializationError err = deserializeJson(doc, server.arg("plain"));
   if (err) { addCORS(); server.send(400, "text/plain", String("JSON error: ")+err.c_str()); return; }
 
-  if (!doc["wifi"].is<JsonObject>()) { addCORS(); server.send(400,"text/plain","Missing 'wifi' object"); return; }
+  // Das Web-UI sendet fuer /api/wifi direkt das WLAN-Objekt. Fuer Abwaertskompatibilitaet
+  // akzeptieren wir zusaetzlich das fruehere Format { "wifi": { ... } }.
+  JsonVariant wifiDoc = doc["wifi"];
+  if (!wifiDoc.is<JsonObject>() && doc.is<JsonObject>()) {
+    wifiDoc = doc.as<JsonVariant>();
+  }
+  if (!wifiDoc.is<JsonObject>()) { addCORS(); server.send(400,"text/plain","Missing wifi object"); return; }
 
   // WLAN übernehmen
-  wifiEnabled = (bool)(doc["wifi"]["enabled"] | wifiEnabled);
-  String newMode = String( doc["wifi"]["mode"] | wifiModeCfg.c_str() );
+  wifiEnabled = (bool)(wifiDoc["enabled"] | wifiEnabled);
+  String newMode = String( wifiDoc["mode"] | wifiModeCfg.c_str() );
   newMode.toLowerCase();
   if (newMode == "ap" || newMode == "sta") wifiModeCfg = newMode;
 
-  if (doc["wifi"]["ap"].is<JsonObject>()) {
-    apSsidCfg = String( doc["wifi"]["ap"]["ssid"]     | apSsidCfg.c_str() );
-    apPassCfg = String( doc["wifi"]["ap"]["password"] | apPassCfg.c_str() );
+  if (wifiDoc["ap"].is<JsonObject>()) {
+    apSsidCfg = String( wifiDoc["ap"]["ssid"]     | apSsidCfg.c_str() );
+    apPassCfg = String( wifiDoc["ap"]["password"] | apPassCfg.c_str() );
   }
-  if (doc["wifi"]["sta"].is<JsonObject>()) {
-    staSsidCfg= String( doc["wifi"]["sta"]["ssid"]     | staSsidCfg.c_str() );
-    staPassCfg= String( doc["wifi"]["sta"]["password"] | staPassCfg.c_str() );
+  if (wifiDoc["sta"].is<JsonObject>()) {
+    staSsidCfg= String( wifiDoc["sta"]["ssid"]     | staSsidCfg.c_str() );
+    staPassCfg= String( wifiDoc["sta"]["password"] | staPassCfg.c_str() );
   }
 
   bool ok = saveConfig();
