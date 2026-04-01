@@ -332,6 +332,18 @@
       color: var(--muted)
     }
 
+    .group-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 6px
+    }
+
     .entity-links {
       display: flex;
       flex-wrap: wrap;
@@ -445,6 +457,57 @@
 
     .info-box p {
       margin: 0 0 8px
+    }
+
+    .stats-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px
+    }
+
+    .stat-card {
+      background: #12151a;
+      border: 1px solid #232a35;
+      border-radius: 12px;
+      padding: 12px
+    }
+
+    .stat-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 8px
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted)
+    }
+
+    .stat-value {
+      font-weight: 700
+    }
+
+    .meter {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: #0b0e12;
+      overflow: hidden;
+      border: 1px solid #1e2430
+    }
+
+    .meter-bar {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #34c759, #ffb020, #ff5c5c)
+    }
+
+    .stat-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted)
     }
 
     @media(max-width:700px) {
@@ -866,6 +929,17 @@
       const group = state.groups.find(entry => Number(entry.id) === Number(groupId));
       if (!group) return `Gruppe ${groupId}`;
       return group.name ? `Gruppe ${groupId} (${group.name})` : `Gruppe ${groupId}`;
+    }
+
+    function getGroupAccent(groupId) {
+      const numericId = Number(groupId) || 0;
+      const hue = ((numericId * 73) % 360 + 360) % 360;
+      return {
+        border: `hsla(${hue}, 70%, 55%, 0.92)`,
+        bgSoft: `hsla(${hue}, 80%, 55%, 0.12)`,
+        bgStrong: `hsla(${hue}, 85%, 55%, 0.2)`,
+        text: `hsl(${hue}, 90%, 84%)`
+      };
     }
 
     function computeExpectedHostName() {
@@ -1342,18 +1416,38 @@
       const r = await fetch("/api/sysinfo");
       if (!r.ok) { $("#sysinfo").textContent = "–"; return; }
       const s = await r.json();
+      const heapTotalBytes = Number(s.heap_total_bytes || 0);
+      const heapFreeBytes = Number(s.heap_free_bytes || 0);
+      const heapUsedBytes = Math.max(0, heapTotalBytes - heapFreeBytes);
       const heapKb = Math.round((Number(s.heap_free_bytes || 0) / 1024) * 10) / 10;
       const fsUsedKb = Math.round((Number(s.fs_used_bytes || 0) / 1024) * 10) / 10;
       const fsFreeKb = Math.round((Number(s.fs_free_bytes || 0) / 1024) * 10) / 10;
       const fsTotalKb = Math.round((Number(s.fs_total_bytes || 0) / 1024) * 10) / 10;
+      const heapUsedPercent = heapTotalBytes > 0 ? Math.round((heapUsedBytes / heapTotalBytes) * 100) : 0;
+      const fsUsedPercent = Number(s.fs_total_bytes || 0) > 0 ? Math.round((Number(s.fs_used_bytes || 0) / Number(s.fs_total_bytes || 1)) * 100) : 0;
       $("#sysinfo").innerHTML = `
         <strong>Board:</strong> ${s.board_name || "?"} <span class="muted">(${s.max_led_outputs || "?"} LED-Ausgänge)</span><br>
         <strong>LEDC:</strong> ${s.ledc_freq_hz} Hz / ${s.ledc_res_bits} Bit, Kanäle: ${s.max_ledc_channels}<br>
         <strong>Ausgänge konfiguriert:</strong> ${s.num_lights} von ${s.max_led_outputs} möglichen<br>
-        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || "?"}<br>
-        <strong>Freier Heap:</strong> ${heapKb} KB<br>
-        <strong>LittleFS:</strong> ${fsUsedKb} KB belegt / ${fsTotalKb} KB gesamt<br>
-        <strong>LittleFS frei:</strong> ${fsFreeKb} KB
+        <strong>Reset Pin:</strong> GPIO ${s.reset_pin || "?"}
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-head">
+              <span class="stat-label">Heap-Auslastung</span>
+              <span class="stat-value">${heapUsedPercent}% belegt</span>
+            </div>
+            <div class="meter"><div class="meter-bar" style="width:${heapUsedPercent}%"></div></div>
+            <div class="stat-note">${heapKb} KB frei von ${Math.round((heapTotalBytes / 1024) * 10) / 10} KB Heap</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head">
+              <span class="stat-label">LittleFS-Auslastung</span>
+              <span class="stat-value">${fsUsedPercent}% belegt</span>
+            </div>
+            <div class="meter"><div class="meter-bar" style="width:${fsUsedPercent}%"></div></div>
+            <div class="stat-note">${fsUsedKb} KB belegt, ${fsFreeKb} KB frei von ${fsTotalKb} KB</div>
+          </div>
+        </div>
       `;
     }
 
@@ -1463,13 +1557,21 @@
 
       state.lights.forEach((light, idx) => {
         const item = el("div", "item");
+        const accent = getGroupAccent(light.groupId);
+        item.style.borderLeft = `4px solid ${accent.border}`;
+        item.style.background = `linear-gradient(90deg, ${accent.bgStrong}, ${accent.bgSoft} 18%, transparent 45%)`;
         item.appendChild(el("div", "pill", idx));
 
         const patternName = state.patterns[Number(light.patternIndex)]?.name || `Pattern ${Number(light.patternIndex || 0)}`;
         const groupLabel = getGroupLabel(light.groupId);
         const body = el("div", "entity-meta");
         body.appendChild(el("div", "entity-title", `GPIO ${light.pin}, Kanal ${light.channel}`));
-        body.appendChild(el("div", "entity-copy", `${patternName}, ${groupLabel}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
+        body.appendChild(el("div", "entity-copy", `${patternName}, Phase ${light.phase_ms} ms, Rest ${light.restOverrideMs} ms`));
+        const groupChip = el("div", "group-chip", groupLabel);
+        groupChip.style.borderColor = accent.border;
+        groupChip.style.background = accent.bgSoft;
+        groupChip.style.color = accent.text;
+        body.appendChild(groupChip);
         item.appendChild(body);
 
         const actions = el("div", "row item-actions");

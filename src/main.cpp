@@ -730,6 +730,7 @@ static void startServerRoutes() {
     doc["num_lights"]        = (uint32_t)lights.size();
     doc["reset_pin"]         = RESET_WIFI_PIN;
     doc["heap_free_bytes"]   = ESP.getFreeHeap();
+    doc["heap_total_bytes"]  = ESP.getHeapSize();
     doc["fs_total_bytes"]    = (uint32_t)totalBytes;
     doc["fs_used_bytes"]     = (uint32_t)usedBytes;
     doc["fs_free_bytes"]     = (uint32_t)(totalBytes >= usedBytes ? (totalBytes - usedBytes) : 0U);
