@@ -3873,6 +3873,138 @@
 			(justify left bottom)
 		)
 	)
+	(gr_text "D16"
+		(at 101 87.5 0)
+		(layer "F.SilkS")
+		(uuid "3287ac00-69b9-45fa-9e08-c5069af147aa")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D17"
+		(at 101 90 0)
+		(layer "F.SilkS")
+		(uuid "5ca7ac8f-4727-426a-85bb-5085aa12fe7f")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D18"
+		(at 101 93 0)
+		(layer "F.SilkS")
+		(uuid "16e95bed-a474-4ab9-9f6c-c56bea969a6f")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D19"
+		(at 101 95.5 0)
+		(layer "F.SilkS")
+		(uuid "69ef49b3-bf10-455b-9510-9f973af9b8a2")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D21"
+		(at 101 98 0)
+		(layer "F.SilkS")
+		(uuid "3b62cd88-8a4f-491a-bda0-1d672f6a85d9")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D22"
+		(at 101 100.5 0)
+		(layer "F.SilkS")
+		(uuid "71ac17b4-0644-4487-a9a7-9babda8e6203")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D23"
+		(at 101 103 0)
+		(layer "F.SilkS")
+		(uuid "c93e3174-9abb-480c-9800-f7bbc6cfe31b")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D25"
+		(at 101 105.5 0)
+		(layer "F.SilkS")
+		(uuid "5fa31326-3258-4de9-838c-5ca8127cd201")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D26"
+		(at 101 108 0)
+		(layer "F.SilkS")
+		(uuid "41a6c635-d117-4f52-a337-afb57f718828")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "D27"
+		(at 104 111.5 90)
+		(layer "F.SilkS")
+		(uuid "d06e90db-69b5-4ebe-869a-51755892880c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "GND"
+		(at 104 114.5 90)
+		(layer "F.SilkS")
+		(uuid "ab74b38c-d51b-479a-987b-d309c103087c")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+			(justify left bottom)
+		)
+	)
 	(segment
 		(start 69.7719 76.9767)
 		(end 70.4479 76.9767)
