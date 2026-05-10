@@ -1,0 +1,6 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+A1,DOIT_ESP32_DEVKIT_30Pins,1,ESP32_DevKit_V1_DOIT_30GPIOs,
+C1,C_Radial_D10.0mm_H20.0mm_P5.00mm,1,1000uF,
+J1,PinHeader_1x12_P2.54mm_Vertical,1,Conn_01x12_Pin,
+R1,R_1206,1,10k,
+SW1,SW_Push_SPST_NO_Alps_SKRK,1,SW_Push,
