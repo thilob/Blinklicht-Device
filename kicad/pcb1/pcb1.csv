@@ -1,0 +1,6 @@
+"#","Reference","Qty","Value","Footprint","DNP"
+"1","A1","1","ESP32_DevKit_V1_DOIT_30GPIOs","PCM_SL_Development_Boards:DOIT_ESP32_DEVKIT_30Pins",""
+"2","C1","1","1000uF","Capacitor_THT:C_Radial_D10.0mm_H20.0mm_P5.00mm",""
+"3","J1","1","Conn_01x12_Pin","Connector_PinHeader_2.54mm:PinHeader_1x12_P2.54mm_Vertical",""
+"4","R1","1","10k","PCM_fab:R_1206",""
+"5","SW1","1","SW_Push","Button_Switch_SMD:SW_Push_SPST_NO_Alps_SKRK",""
